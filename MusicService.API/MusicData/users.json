@@ -1,0 +1,79 @@
+[
+  {
+    "username": "pistaha",
+    "email": "spistaha@gmail.com",
+    "passwordHash": "$2a$11$eAY7ULj1LJZAtvjwu4hMqeME2CwYObH1syvV/lzpdohunDCXwfXHK",
+    "displayName": "Pista",
+    "profileImage": null,
+    "dateOfBirth": "2025-12-17T04:56:45.965Z",
+    "country": "USA",
+    "favoriteGenres": [
+      "Rock"
+    ],
+    "listenTimeMinutes": 0,
+    "lastLogin": "2025-12-17T04:57:40.09976Z",
+    "createdPlaylists": [],
+    "followedPlaylists": [],
+    "favoriteTracks": [],
+    "followedArtists": [],
+    "favoriteAlbums": [],
+    "friends": [
+      {
+        "username": "selenagomez",
+        "email": "selena.gomez@example.com",
+        "passwordHash": "$2a$11$MRqDOsO.ncEEsAIRW02o7.vowQDSmXn8Nx25HKXcS0Xa5ZrjQRQKe",
+        "displayName": "Selena Gomez",
+        "profileImage": null,
+        "dateOfBirth": "1992-07-22T00:00:00Z",
+        "country": "USA",
+        "favoriteGenres": [
+          "Pop",
+          "Dance-pop",
+          "R\u0026B"
+        ],
+        "listenTimeMinutes": 0,
+        "lastLogin": "2025-12-17T05:34:22.712355Z",
+        "createdPlaylists": [],
+        "followedPlaylists": [],
+        "favoriteTracks": [],
+        "followedArtists": [],
+        "favoriteAlbums": [],
+        "friends": [],
+        "listenHistory": [],
+        "id": "7f8553a0-296d-4987-b39b-2042aca6ec3e",
+        "createdAt": "2025-12-17T05:34:22.712377Z",
+        "updatedAt": "2025-12-17T05:34:22.712377Z"
+      }
+    ],
+    "listenHistory": [],
+    "id": "1d1aa270-e193-439b-93b4-4153fa61e903",
+    "createdAt": "2025-12-17T04:57:40.100387Z",
+    "updatedAt": "2025-12-17T04:57:40.100408Z"
+  },
+  {
+    "username": "selenagomez",
+    "email": "selena.gomez@example.com",
+    "passwordHash": "$2a$11$MRqDOsO.ncEEsAIRW02o7.vowQDSmXn8Nx25HKXcS0Xa5ZrjQRQKe",
+    "displayName": "Selena Gomez",
+    "profileImage": null,
+    "dateOfBirth": "1992-07-22T00:00:00Z",
+    "country": "USA",
+    "favoriteGenres": [
+      "Pop",
+      "Dance-pop",
+      "R\u0026B"
+    ],
+    "listenTimeMinutes": 0,
+    "lastLogin": "2025-12-17T05:34:22.712355Z",
+    "createdPlaylists": [],
+    "followedPlaylists": [],
+    "favoriteTracks": [],
+    "followedArtists": [],
+    "favoriteAlbums": [],
+    "friends": [],
+    "listenHistory": [],
+    "id": "7f8553a0-296d-4987-b39b-2042aca6ec3e",
+    "createdAt": "2025-12-17T05:34:22.712377Z",
+    "updatedAt": "2025-12-17T05:34:22.712377Z"
+  }
+]

@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AutoFixture" Version="4.18.1" />
+        <PackageReference Include="FluentAssertions" Version="6.12.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+        <PackageReference Include="Moq" Version="4.20.70" />
+        <PackageReference Include="coverlet.msbuild" Version="6.0.0">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="ReportGenerator" Version="5.3.9">
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="xunit" Version="2.6.1" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.4">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MusicService.Application\MusicService.Application.csproj" />
+        <ProjectReference Include="..\MusicService.Domain\MusicService.Domain.csproj" />
+        <ProjectReference Include="..\MusicService.Infrastructure\MusicService.Infrastructure.csproj" />
+        <ProjectReference Include="..\MusicService.API\MusicService.API.csproj" />
+    </ItemGroup>
+
+    <PropertyGroup>
+        <CollectCoverage>true</CollectCoverage>
+        <CoverletOutput>$(MSBuildProjectDirectory)/TestResults/coverage/</CoverletOutput>
+        <CoverletOutputFormat>cobertura</CoverletOutputFormat>
+    </PropertyGroup>
+
+    <Target Name="GenerateHtmlCoverageReport" AfterTargets="Test" Condition="'$(CollectCoverage)' == 'true'">
+        <PropertyGroup>
+            <CoverageReportDir>$(MSBuildProjectDirectory)/TestResults/CoverageReport</CoverageReportDir>
+            <ReportGeneratorDll>$(PkgReportGenerator)\tools\net8.0\ReportGenerator.dll</ReportGeneratorDll>
+            <CoverageInput>$(CoverletOutput)coverage.cobertura.xml</CoverageInput>
+        </PropertyGroup>
+
+        <ItemGroup>
+            <_CoverageFiles Include="$(CoverageInput)" Condition="Exists('$(CoverageInput)')" />
+        </ItemGroup>
+
+        <MakeDir Directories="$(CoverageReportDir)" Condition=" '@(_CoverageFiles)' != '' " />
+
+        <Exec Condition=" '@(_CoverageFiles)' != '' And Exists('$(ReportGeneratorDll)') "
+              Command="dotnet &quot;$(ReportGeneratorDll)&quot; -reports:&quot;$(CoverageInput)&quot; -targetdir:&quot;$(CoverageReportDir)&quot; -reporttypes:Html;TextSummary" />
+    </Target>
+
+</Project>

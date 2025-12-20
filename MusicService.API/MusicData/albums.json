@@ -1,0 +1,102 @@
+[
+  {
+    "title": "Revival",
+    "description": "Selena Gomez\u0027s second studio album",
+    "coverImage": null,
+    "releaseDate": "2015-10-09T00:00:00Z",
+    "type": 0,
+    "genres": [
+      "Pop"
+    ],
+    "totalDurationMinutes": 0,
+    "trackCount": 0,
+    "artistId": "1c5520c2-b1f9-43a2-8a31-fd7c9fb453d6",
+    "artist": null,
+    "tracks": [],
+    "addedByUsers": [],
+    "isSingle": false,
+    "id": "4dff6aa4-ac43-49ef-b531-932972e4b610",
+    "createdAt": "2025-12-17T05:39:04.70401Z",
+    "updatedAt": "2025-12-17T05:39:04.70401Z"
+  },
+  {
+    "title": "Revival1",
+    "description": "Selena Gomez\u0027s second studio album1",
+    "coverImage": null,
+    "releaseDate": "2015-10-09T00:00:00Z",
+    "type": 0,
+    "genres": [
+      "Rock"
+    ],
+    "totalDurationMinutes": 0,
+    "trackCount": 0,
+    "artistId": "1c5520c2-b1f9-43a2-8a31-fd7c9fb453d6",
+    "artist": null,
+    "tracks": [],
+    "addedByUsers": [],
+    "isSingle": false,
+    "id": "b4437601-8be9-48aa-92db-34e20e71ff68",
+    "createdAt": "2025-12-17T05:42:35.507595Z",
+    "updatedAt": "2025-12-17T05:42:35.507595Z"
+  },
+  {
+    "title": "Revival2",
+    "description": "Selena Gomez\u0027s second studio album1",
+    "coverImage": null,
+    "releaseDate": "2015-10-09T00:00:00Z",
+    "type": 0,
+    "genres": [
+      "Rock"
+    ],
+    "totalDurationMinutes": 0,
+    "trackCount": 0,
+    "artistId": "1c5520c2-b1f9-43a2-8a31-fd7c9fb453d6",
+    "artist": null,
+    "tracks": [],
+    "addedByUsers": [],
+    "isSingle": false,
+    "id": "bebbae06-95f3-4309-8a60-e49b3fb96334",
+    "createdAt": "2025-12-17T05:42:49.172067Z",
+    "updatedAt": "2025-12-17T05:42:49.172067Z"
+  },
+  {
+    "title": "Revival3",
+    "description": "Selena Gomez\u0027s second studio album1",
+    "coverImage": null,
+    "releaseDate": "2015-10-09T00:00:00Z",
+    "type": 0,
+    "genres": [
+      "Rock"
+    ],
+    "totalDurationMinutes": 0,
+    "trackCount": 0,
+    "artistId": "1c5520c2-b1f9-43a2-8a31-fd7c9fb453d6",
+    "artist": null,
+    "tracks": [],
+    "addedByUsers": [],
+    "isSingle": false,
+    "id": "4b6a65e2-9f56-4494-8885-c47048e1261e",
+    "createdAt": "2025-12-17T05:42:57.229418Z",
+    "updatedAt": "2025-12-17T05:42:57.229418Z"
+  },
+  {
+    "title": "Revival4",
+    "description": "Selena Gomez\u0027s second studio album1",
+    "coverImage": null,
+    "releaseDate": "2015-10-09T00:00:00Z",
+    "type": 0,
+    "genres": [
+      "Rock"
+    ],
+    "totalDurationMinutes": 0,
+    "trackCount": 0,
+    "artistId": "fd9e754d-befa-42be-af19-4971a16023a3",
+    "artist": null,
+    "tracks": [],
+    "addedByUsers": [],
+    "isSingle": false,
+    "id": "bbf2efb5-e712-46a3-8db3-e91ca75814b8",
+    "createdAt": "2025-12-17T05:44:28.274246Z",
+    "updatedAt": "2025-12-17T05:44:28.274246Z"
+  }
+]
