@@ -1,7 +1,8 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Common.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -11,14 +12,14 @@ namespace MusicService.Application.Albums.Commands
 {
     public class BulkDeleteAlbumsCommandHandler : IRequestHandler<BulkDeleteAlbumsCommand, BulkDeleteResult>
     {
-        private readonly IAlbumRepository _albumRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly ILogger<BulkDeleteAlbumsCommandHandler> _logger;
 
         public BulkDeleteAlbumsCommandHandler(
-            IAlbumRepository albumRepository,
+            IMusicServiceDbContext dbContext,
             ILogger<BulkDeleteAlbumsCommandHandler> logger)
         {
-            _albumRepository = albumRepository;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -35,7 +36,8 @@ namespace MusicService.Application.Albums.Commands
             {
                 try
                 {
-                    var album = await _albumRepository.GetByIdAsync(albumId, cancellationToken);
+                    var album = await _dbContext.Albums
+                        .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
                     if (album == null)
                     {
                         result.Items.Add(new BulkDeleteItem
@@ -49,28 +51,15 @@ namespace MusicService.Application.Albums.Commands
                         continue;
                     }
 
-                    var deleted = await _albumRepository.DeleteAsync(albumId, cancellationToken);
-                    if (deleted)
+                    _dbContext.Albums.Remove(album);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    result.Items.Add(new BulkDeleteItem
                     {
-                        result.Items.Add(new BulkDeleteItem
-                        {
-                            Id = albumId,
-                            Success = true,
-                            Message = "Album deleted successfully"
-                        });
-                        result.SuccessfulCount++;
-                    }
-                    else
-                    {
-                        result.Items.Add(new BulkDeleteItem
-                        {
-                            Id = albumId,
-                            Success = false,
-                            Message = "Failed to delete album",
-                            Error = "Delete operation failed"
-                        });
-                        result.FailedCount++;
-                    }
+                        Id = albumId,
+                        Success = true,
+                        Message = "Album deleted successfully"
+                    });
+                    result.SuccessfulCount++;
                 }
                 catch (Exception ex)
                 {

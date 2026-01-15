@@ -1,36 +1,43 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Tracks.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using MusicService.Application.Common.Interfaces;
 
 namespace MusicService.Application.Tracks.Queries
 {
     public class GetTracksByAlbumQueryHandler : IRequestHandler<GetTracksByAlbumQuery, List<TrackDto>>
     {
-        private readonly ITrackRepository _trackRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IMapper _mapper;
 
         public GetTracksByAlbumQueryHandler(
-            ITrackRepository trackRepository,
+            IMusicServiceDbContext dbContext,
             IMapper mapper)
         {
-            _trackRepository = trackRepository;
+            _dbContext = dbContext;
             _mapper = mapper;
         }
 
         public async Task<List<TrackDto>> Handle(GetTracksByAlbumQuery request, CancellationToken cancellationToken)
         {
-            var tracks = await _trackRepository.GetTracksByAlbumAsync(request.AlbumId, cancellationToken);
+            var query = _dbContext.Tracks
+                .AsNoTracking()
+                .Where(t => t.AlbumId == request.AlbumId)
+                .Include(t => t.Album)
+                .Include(t => t.Artist)
+                .AsSplitQuery();
             
             if (request.SortByTrackNumber)
             {
-                tracks = tracks.OrderBy(t => t.TrackNumber).ToList();
+                query = query.OrderBy(t => t.TrackNumber);
             }
 
+            var tracks = await query.ToListAsync(cancellationToken);
             return _mapper.Map<List<TrackDto>>(tracks);
         }
     }

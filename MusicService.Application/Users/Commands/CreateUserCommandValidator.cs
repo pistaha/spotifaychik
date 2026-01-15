@@ -1,5 +1,6 @@
 using FluentValidation;
-using MusicService.Application.Common.Interfaces.Repositories;
+using Microsoft.EntityFrameworkCore;
+using MusicService.Application.Common.Interfaces;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -7,11 +8,11 @@ namespace MusicService.Application.Users.Commands
 {
     public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
     {
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
 
-        public CreateUserCommandValidator(IUserRepository userRepository)
+        public CreateUserCommandValidator(IMusicServiceDbContext dbContext)
         {
-            _userRepository = userRepository;
+            _dbContext = dbContext;
 
             RuleFor(x => x.Username)
                 .NotEmpty().WithMessage("Username is required")
@@ -34,12 +35,16 @@ namespace MusicService.Application.Users.Commands
 
         private async Task<bool> BeUniqueUsername(string username, CancellationToken cancellationToken)
         {
-            return !await _userRepository.ExistsByUsernameAsync(username, cancellationToken);
+            return !await _dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Username == username, cancellationToken);
         }
 
         private async Task<bool> BeUniqueEmail(string email, CancellationToken cancellationToken)
         {
-            return !await _userRepository.ExistsByEmailAsync(email, cancellationToken);
+            return !await _dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Email == email, cancellationToken);
         }
     }
 }

@@ -1,10 +1,11 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Common.Dtos;
 using MusicService.Domain.Entities;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,19 +16,16 @@ namespace MusicService.Application.Albums.Commands
 {
     public class BulkCreateAlbumsCommandHandler : IRequestHandler<BulkCreateAlbumsCommand, BulkOperationResult<AlbumDto>>
     {
-        private readonly IAlbumRepository _albumRepository;
-        private readonly IArtistRepository _artistRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IMapper _mapper;
         private readonly ILogger<BulkCreateAlbumsCommandHandler> _logger;
 
         public BulkCreateAlbumsCommandHandler(
-            IAlbumRepository albumRepository,
-            IArtistRepository artistRepository,
+            IMusicServiceDbContext dbContext,
             IMapper mapper,
             ILogger<BulkCreateAlbumsCommandHandler> logger)
         {
-            _albumRepository = albumRepository;
-            _artistRepository = artistRepository;
+            _dbContext = dbContext;
             _mapper = mapper;
             _logger = logger;
         }
@@ -43,8 +41,10 @@ namespace MusicService.Application.Albums.Commands
             {
                 try
                 {
-                    var artist = await _artistRepository.GetByIdAsync(command.ArtistId, cancellationToken);
-                    if (artist == null)
+                    var artistExists = await _dbContext.Artists
+                        .AsNoTracking()
+                        .AnyAsync(a => a.Id == command.ArtistId, cancellationToken);
+                    if (!artistExists)
                     {
                         result.Items.Add(new BulkOperationItem<AlbumDto>
                         {
@@ -85,18 +85,21 @@ namespace MusicService.Application.Albums.Commands
                 }
             }
 
-            // Создаем все альбомы
             var createdAlbums = new List<AlbumDto>();
-            foreach (var album in albumsToCreate)
+            if (albumsToCreate.Count > 0)
             {
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
                 try
                 {
-                    var createdAlbum = await _albumRepository.CreateAsync(album, cancellationToken);
-                    createdAlbums.Add(_mapper.Map<AlbumDto>(createdAlbum));
+                    _dbContext.Albums.AddRange(albumsToCreate);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    createdAlbums.AddRange(albumsToCreate.Select(a => _mapper.Map<AlbumDto>(a)));
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error creating album in bulk operation");
+                    await transaction.RollbackAsync(cancellationToken);
+                    _logger.LogError(ex, "Error creating albums in bulk operation");
                 }
             }
 

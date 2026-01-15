@@ -1,7 +1,9 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Albums.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,20 +12,27 @@ namespace MusicService.Application.Albums.Queries
 {
     public class GetRecentAlbumsQueryHandler : IRequestHandler<GetRecentAlbumsQuery, List<AlbumDto>>
     {
-        private readonly IAlbumRepository _albumRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IMapper _mapper;
 
         public GetRecentAlbumsQueryHandler(
-            IAlbumRepository albumRepository,
+            IMusicServiceDbContext dbContext,
             IMapper mapper)
         {
-            _albumRepository = albumRepository;
+            _dbContext = dbContext;
             _mapper = mapper;
         }
 
         public async Task<List<AlbumDto>> Handle(GetRecentAlbumsQuery request, CancellationToken cancellationToken)
         {
-            var albums = await _albumRepository.GetRecentReleasesAsync(request.Days, cancellationToken);
+            var threshold = DateTime.UtcNow.AddDays(-request.Days);
+            var albums = await _dbContext.Albums
+                .AsNoTracking()
+                .Where(a => a.ReleaseDate >= threshold)
+                .Include(a => a.Artist)
+                .Include(a => a.Tracks)
+                .AsSplitQuery()
+                .ToListAsync(cancellationToken);
             return _mapper.Map<List<AlbumDto>>(albums);
         }
     }

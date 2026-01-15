@@ -3,7 +3,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Artists.Dtos;
 using MusicService.Domain.Entities;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,16 +11,16 @@ namespace MusicService.Application.Artists.Commands
 {
     public class CreateArtistCommandHandler : IRequestHandler<CreateArtistCommand, ArtistDto>
     {
-        private readonly IArtistRepository _artistRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IMapper _mapper;
         private readonly ILogger<CreateArtistCommandHandler> _logger;
 
         public CreateArtistCommandHandler(
-            IArtistRepository artistRepository,
+            IMusicServiceDbContext dbContext,
             IMapper mapper,
             ILogger<CreateArtistCommandHandler> logger)
         {
-            _artistRepository = artistRepository;
+            _dbContext = dbContext;
             _mapper = mapper;
             _logger = logger;
         }
@@ -43,11 +43,12 @@ namespace MusicService.Application.Artists.Commands
                 MonthlyListeners = 0
             };
 
-            var createdArtist = await _artistRepository.CreateAsync(artist, cancellationToken);
+            _dbContext.Artists.Add(artist);
+            await _dbContext.SaveChangesAsync(cancellationToken);
             
-            _logger.LogInformation("Artist {ArtistId} created successfully", createdArtist.Id);
+            _logger.LogInformation("Artist {ArtistId} created successfully", artist.Id);
             
-            return _mapper.Map<ArtistDto>(createdArtist);
+            return _mapper.Map<ArtistDto>(artist);
         }
     }
 }

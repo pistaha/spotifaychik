@@ -1,6 +1,7 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using MusicService.Application.Search.Dtos;
 using System;
 using System.Collections.Generic;
@@ -12,26 +13,14 @@ namespace MusicService.Application.Search.Queries
 {
     public class GlobalSearchQueryHandler : IRequestHandler<GlobalSearchQuery, GlobalSearchResultDto>
     {
-        private readonly IArtistRepository _artistRepository;
-        private readonly IAlbumRepository _albumRepository;
-        private readonly ITrackRepository _trackRepository;
-        private readonly IPlaylistRepository _playlistRepository;
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly ILogger<GlobalSearchQueryHandler> _logger;
 
         public GlobalSearchQueryHandler(
-            IArtistRepository artistRepository,
-            IAlbumRepository albumRepository,
-            ITrackRepository trackRepository,
-            IPlaylistRepository playlistRepository,
-            IUserRepository userRepository,
+            IMusicServiceDbContext dbContext,
             ILogger<GlobalSearchQueryHandler> logger)
         {
-            _artistRepository = artistRepository;
-            _albumRepository = albumRepository;
-            _trackRepository = trackRepository;
-            _playlistRepository = playlistRepository;
-            _userRepository = userRepository;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -64,8 +53,9 @@ namespace MusicService.Application.Search.Queries
 
         private async Task ProcessGlobalArtistsAsync(GlobalSearchResultDto result, string searchTerm, int limit, CancellationToken cancellationToken)
         {
-            var artists = await _artistRepository.SearchAsync(searchTerm, cancellationToken);
-            result.TopArtists = artists
+            result.TopArtists = await _dbContext.Artists
+                .AsNoTracking()
+                .Where(a => EF.Functions.ILike(a.Name, $"%{searchTerm}%"))
                 .OrderByDescending(a => a.MonthlyListeners)
                 .Take(limit)
                 .Select(a => new GlobalArtistDto
@@ -74,15 +64,14 @@ namespace MusicService.Application.Search.Queries
                     Name = a.Name,
                     ImageUrl = a.ProfileImage
                 })
-                .ToList();
+                .ToListAsync(cancellationToken);
         }
 
         private async Task ProcessGlobalAlbumsAsync(GlobalSearchResultDto result, string searchTerm, int limit, CancellationToken cancellationToken)
         {
-            var albums = await _albumRepository.SearchAsync(searchTerm, cancellationToken);
-            var allArtists = await _artistRepository.GetAllAsync(cancellationToken);
-            
-            result.TopAlbums = albums
+            result.TopAlbums = await _dbContext.Albums
+                .AsNoTracking()
+                .Where(a => EF.Functions.ILike(a.Title, $"%{searchTerm}%"))
                 .OrderByDescending(a => a.ReleaseDate)
                 .Take(limit)
                 .Select(a => new GlobalAlbumDto
@@ -90,35 +79,33 @@ namespace MusicService.Application.Search.Queries
                     Id = a.Id,
                     Title = a.Title,
                     ImageUrl = a.CoverImage,
-                    ArtistName = allArtists.FirstOrDefault(artist => artist.Id == a.ArtistId)?.Name ?? "Unknown"
+                    ArtistName = a.Artist != null ? a.Artist.Name : "Unknown"
                 })
-                .ToList();
+                .ToListAsync(cancellationToken);
         }
 
         private async Task ProcessGlobalTracksAsync(GlobalSearchResultDto result, string searchTerm, int limit, CancellationToken cancellationToken)
         {
-            var tracks = await _trackRepository.SearchAsync(searchTerm, cancellationToken);
-            var allArtists = await _artistRepository.GetAllAsync(cancellationToken);
-            
-            result.TopTracks = tracks
+            result.TopTracks = await _dbContext.Tracks
+                .AsNoTracking()
+                .Where(t => EF.Functions.ILike(t.Title, $"%{searchTerm}%"))
                 .OrderByDescending(t => t.PlayCount)
                 .Take(limit)
                 .Select(t => new GlobalTrackDto
                 {
                     Id = t.Id,
                     Title = t.Title,
-                    ArtistName = allArtists.FirstOrDefault(artist => artist.Id == t.ArtistId)?.Name ?? "Unknown",
+                    ArtistName = t.Artist != null ? t.Artist.Name : "Unknown",
                     Duration = t.DurationSeconds
                 })
-                .ToList();
+                .ToListAsync(cancellationToken);
         }
 
         private async Task ProcessGlobalPlaylistsAsync(GlobalSearchResultDto result, string searchTerm, int limit, CancellationToken cancellationToken)
         {
-            var playlists = await _playlistRepository.SearchAsync(searchTerm, cancellationToken);
-            var allUsers = await _userRepository.GetAllAsync(cancellationToken);
-            
-            result.TopPlaylists = playlists
+            result.TopPlaylists = await _dbContext.Playlists
+                .AsNoTracking()
+                .Where(p => EF.Functions.ILike(p.Title, $"%{searchTerm}%"))
                 .OrderByDescending(p => p.FollowersCount)
                 .Take(limit)
                 .Select(p => new GlobalPlaylistDto
@@ -126,9 +113,9 @@ namespace MusicService.Application.Search.Queries
                     Id = p.Id,
                     Title = p.Title,
                     ImageUrl = p.CoverImage,
-                    CreatorName = allUsers.FirstOrDefault(user => user.Id == p.CreatedById)?.Username ?? "Unknown"
+                    CreatorName = p.CreatedBy != null ? p.CreatedBy.Username : "Unknown"
                 })
-                .ToList();
+                .ToListAsync(cancellationToken);
         }
     }
 }

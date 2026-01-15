@@ -1,11 +1,9 @@
 using System;
-using System.IO;
 using MusicService.API.Configuration;
-using MusicService.API.HealthChecks;
 using MusicService.Application;
 using MusicService.Infrastructure;
 using MusicService.Infrastructure.Configuration;
-using Microsoft.Extensions.Options;
+using FluentMigrator.Runner;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,10 +11,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
-
-// Конфигурация приложения
-builder.Services.Configure<FileStorageOptions>(
-    builder.Configuration.GetSection("FileStorage"));
 
 // Регистрация слоев приложения
 builder.Services
@@ -37,26 +31,15 @@ var app = builder.Build();
 // Конфигурация middleware
 app.UseApiConfiguration(app.Environment);
 
-// Создание директории для данных и файлов
 using (var scope = app.Services.CreateScope())
 {
-    var options = scope.ServiceProvider.GetRequiredService<IOptions<FileStorageOptions>>().Value;
-    
-    if (!Directory.Exists(options.DataDirectory))
-    {
-        Directory.CreateDirectory(options.DataDirectory);
-        app.Logger.LogInformation("Created data directory: {DataDirectory}", options.DataDirectory);
-    }
+    var env = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
 
-    // Создание поддиректорий для бэкапов
-    if (options.Backup.Enabled && !string.IsNullOrEmpty(options.Backup.BackupDirectory))
+    if (env.IsDevelopment())
     {
-        var backupDir = Path.Combine(options.DataDirectory, options.Backup.BackupDirectory);
-        if (!Directory.Exists(backupDir))
-        {
-            Directory.CreateDirectory(backupDir);
-            app.Logger.LogInformation("Created backup directory: {BackupDirectory}", backupDir);
-        }
+        var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        runner.MigrateUp();
+        app.Logger.LogInformation("Database migrations applied successfully");
     }
 }
 

@@ -1,7 +1,9 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Playlists.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,20 +11,26 @@ namespace MusicService.Application.Playlists.Queries
 {
     public class GetPlaylistByIdQueryHandler : IRequestHandler<GetPlaylistByIdQuery, PlaylistDto?>
     {
-        private readonly IPlaylistRepository _playlistRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IMapper _mapper;
 
         public GetPlaylistByIdQueryHandler(
-            IPlaylistRepository playlistRepository,
+            IMusicServiceDbContext dbContext,
             IMapper mapper)
         {
-            _playlistRepository = playlistRepository;
+            _dbContext = dbContext;
             _mapper = mapper;
         }
 
         public async Task<PlaylistDto?> Handle(GetPlaylistByIdQuery request, CancellationToken cancellationToken)
         {
-            var playlist = await _playlistRepository.GetByIdAsync(request.PlaylistId, cancellationToken);
+            var playlist = await _dbContext.Playlists
+                .AsNoTracking()
+                .Include(p => p.CreatedBy)
+                .Include(p => p.PlaylistTracks)
+                .Include(p => p.Followers)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(p => p.Id == request.PlaylistId, cancellationToken);
             
             if (playlist == null)
                 return null;

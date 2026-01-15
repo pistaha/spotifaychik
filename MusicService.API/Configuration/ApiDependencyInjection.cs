@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
-using MusicService.API.HealthChecks;
+using MusicService.Infrastructure.Persistence;
 using System.Reflection;
 
 namespace MusicService.API.Configuration
@@ -153,7 +153,7 @@ namespace MusicService.API.Configuration
 
             // Health Checks
             services.AddHealthChecks()
-                .AddCheck<FileStorageHealthCheck>("file_storage");
+                .AddDbContextCheck<MusicServiceDbContext>("database");
 
             // Response Compression
             services.AddResponseCompression(options =>

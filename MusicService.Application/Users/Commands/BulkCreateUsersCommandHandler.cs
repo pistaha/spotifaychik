@@ -4,10 +4,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Common.Dtos;
 using MusicService.Application.Common.Interfaces;
-using MusicService.Application.Common.Interfaces.Repositories;
 using MusicService.Application.Users.Dtos;
 using MusicService.Domain.Entities;
 
@@ -15,18 +15,18 @@ namespace MusicService.Application.Users.Commands
 {
     public class BulkCreateUsersCommandHandler : IRequestHandler<BulkCreateUsersCommand, BulkOperationResult<UserDto>>
     {
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IMapper _mapper;
         private readonly ILogger<BulkCreateUsersCommandHandler> _logger;
 
         public BulkCreateUsersCommandHandler(
-            IUserRepository userRepository,
+            IMusicServiceDbContext dbContext,
             IPasswordHasher passwordHasher,
             IMapper mapper,
             ILogger<BulkCreateUsersCommandHandler> logger)
         {
-            _userRepository = userRepository;
+            _dbContext = dbContext;
             _passwordHasher = passwordHasher;
             _mapper = mapper;
             _logger = logger;
@@ -39,11 +39,16 @@ namespace MusicService.Application.Users.Commands
                 TotalCount = request.Commands.Count
             };
 
+            var usersToCreate = new List<User>();
+
             foreach (var command in request.Commands)
             {
                 try
                 {
-                    if (await _userRepository.ExistsByEmailAsync(command.Email, cancellationToken))
+                    var emailExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Email == command.Email, cancellationToken);
+                    if (emailExists)
                     {
                         result.Items.Add(new BulkOperationItem<UserDto>
                         {
@@ -54,7 +59,10 @@ namespace MusicService.Application.Users.Commands
                         continue;
                     }
 
-                    if (await _userRepository.ExistsByUsernameAsync(command.Username, cancellationToken))
+                    var usernameExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Username == command.Username, cancellationToken);
+                    if (usernameExists)
                     {
                         result.Items.Add(new BulkOperationItem<UserDto>
                         {
@@ -78,17 +86,7 @@ namespace MusicService.Application.Users.Commands
                         ListenTimeMinutes = 0
                     };
 
-                    var createdUser = await _userRepository.CreateAsync(user, cancellationToken);
-
-                    result.Items.Add(new BulkOperationItem<UserDto>
-                    {
-                        Success = true,
-                        Message = $"User {createdUser.Username} created successfully",
-                        Data = _mapper.Map<UserDto>(createdUser),
-                        ItemId = createdUser.Id
-                    });
-
-                    result.SuccessfulCount++;
+                    usersToCreate.Add(user);
                 }
                 catch (Exception ex)
                 {
@@ -99,6 +97,43 @@ namespace MusicService.Application.Users.Commands
                         Message = $"Error creating user {command.Username}",
                         Error = ex.Message
                     });
+                }
+            }
+
+            if (usersToCreate.Count > 0)
+            {
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+                try
+                {
+                    _dbContext.Users.AddRange(usersToCreate);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+
+                    foreach (var user in usersToCreate)
+                    {
+                        result.Items.Add(new BulkOperationItem<UserDto>
+                        {
+                            Success = true,
+                            Message = $"User {user.Username} created successfully",
+                            Data = _mapper.Map<UserDto>(user),
+                            ItemId = user.Id
+                        });
+                        result.SuccessfulCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    _logger.LogError(ex, "Failed to save users during bulk operation");
+                    foreach (var user in usersToCreate)
+                    {
+                        result.Items.Add(new BulkOperationItem<UserDto>
+                        {
+                            Success = false,
+                            Message = $"Error creating user {user.Username}",
+                            Error = ex.Message
+                        });
+                    }
                 }
             }
 

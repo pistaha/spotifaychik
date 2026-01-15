@@ -1,9 +1,10 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Domain.Entities;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,19 +13,16 @@ namespace MusicService.Application.Albums.Commands
 {
     public class CreateAlbumCommandHandler : IRequestHandler<CreateAlbumCommand, AlbumDto>
     {
-        private readonly IAlbumRepository _albumRepository;
-        private readonly IArtistRepository _artistRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IMapper _mapper;
         private readonly ILogger<CreateAlbumCommandHandler> _logger;
 
         public CreateAlbumCommandHandler(
-            IAlbumRepository albumRepository,
-            IArtistRepository artistRepository,
+            IMusicServiceDbContext dbContext,
             IMapper mapper,
             ILogger<CreateAlbumCommandHandler> logger)
         {
-            _albumRepository = albumRepository;
-            _artistRepository = artistRepository;
+            _dbContext = dbContext;
             _mapper = mapper;
             _logger = logger;
         }
@@ -33,8 +31,10 @@ namespace MusicService.Application.Albums.Commands
         {
             _logger.LogInformation("Creating album: {Title}", request.Title);
 
-            var artist = await _artistRepository.GetByIdAsync(request.ArtistId, cancellationToken);
-            if (artist == null)
+            var artistExists = await _dbContext.Artists
+                .AsNoTracking()
+                .AnyAsync(a => a.Id == request.ArtistId, cancellationToken);
+            if (!artistExists)
                 throw new ArgumentException($"Artist with ID {request.ArtistId} not found");
 
             var album = new Album
@@ -48,11 +48,12 @@ namespace MusicService.Application.Albums.Commands
                 ArtistId = request.ArtistId
             };
 
-            var createdAlbum = await _albumRepository.CreateAsync(album, cancellationToken);
+            _dbContext.Albums.Add(album);
+            await _dbContext.SaveChangesAsync(cancellationToken);
             
-            _logger.LogInformation("Album {AlbumId} created successfully", createdAlbum.Id);
+            _logger.LogInformation("Album {AlbumId} created successfully", album.Id);
             
-            return _mapper.Map<AlbumDto>(createdAlbum);
+            return _mapper.Map<AlbumDto>(album);
         }
     }
 }

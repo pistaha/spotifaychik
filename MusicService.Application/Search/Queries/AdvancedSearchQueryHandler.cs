@@ -1,7 +1,8 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Common.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using MusicService.Application.Search.Dtos;
 using System;
 using System.Collections.Generic;
@@ -13,26 +14,14 @@ namespace MusicService.Application.Search.Queries
 {
     public class AdvancedSearchQueryHandler : IRequestHandler<AdvancedSearchQuery, PagedResult<AdvancedSearchResultDto>>
     {
-        private readonly IArtistRepository _artistRepository;
-        private readonly IAlbumRepository _albumRepository;
-        private readonly ITrackRepository _trackRepository;
-        private readonly IPlaylistRepository _playlistRepository;
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly ILogger<AdvancedSearchQueryHandler> _logger;
 
         public AdvancedSearchQueryHandler(
-            IArtistRepository artistRepository,
-            IAlbumRepository albumRepository,
-            ITrackRepository trackRepository,
-            IPlaylistRepository playlistRepository,
-            IUserRepository userRepository,
+            IMusicServiceDbContext dbContext,
             ILogger<AdvancedSearchQueryHandler> logger)
         {
-            _artistRepository = artistRepository;
-            _albumRepository = albumRepository;
-            _trackRepository = trackRepository;
-            _playlistRepository = playlistRepository;
-            _userRepository = userRepository;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -79,7 +68,12 @@ namespace MusicService.Application.Search.Queries
 
         private async Task ProcessArtistsAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
         {
-            var artists = await _artistRepository.SearchAsync(searchTerm, cancellationToken);
+            var artists = await _dbContext.Artists
+                .AsNoTracking()
+                .Where(a => EF.Functions.ILike(a.Name, $"%{searchTerm}%") ||
+                            a.Genres.Any(g => EF.Functions.ILike(g, $"%{searchTerm}%")))
+                .ToListAsync(cancellationToken);
+
             foreach (var artist in artists)
             {
                 results.Add(new AdvancedSearchResultDto
@@ -103,23 +97,33 @@ namespace MusicService.Application.Search.Queries
 
         private async Task ProcessAlbumsAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
         {
-            var albums = await _albumRepository.SearchAsync(searchTerm, cancellationToken);
-            var allArtists = await _artistRepository.GetAllAsync(cancellationToken);
-            
-            foreach (var album in albums)
+            var albums = await _dbContext.Albums
+                .AsNoTracking()
+                .Where(a => EF.Functions.ILike(a.Title, $"%{searchTerm}%") ||
+                            a.Genres.Any(g => EF.Functions.ILike(g, $"%{searchTerm}%")))
+                .Select(a => new
+                {
+                    Album = a,
+                    ArtistName = a.Artist != null ? a.Artist.Name : "Unknown",
+                    TrackCount = a.Tracks.Count
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var item in albums)
             {
+                var album = item.Album;
                 results.Add(new AdvancedSearchResultDto
                 {
                     Id = album.Id,
                     Type = "album",
                     Title = album.Title,
-                    Subtitle = allArtists.FirstOrDefault(a => a.Id == album.ArtistId)?.Name ?? "Unknown",
+                    Subtitle = item.ArtistName,
                     ImageUrl = album.CoverImage,
                     Metadata = new Dictionary<string, object>
                     {
                         { "releaseDate", album.ReleaseDate },
                         { "genres", album.Genres },
-                        { "trackCount", album.Tracks?.Count ?? 0 }
+                        { "trackCount", item.TrackCount }
                     },
                     RelevanceScore = CalculateAdvancedRelevance(album.Title, searchTerm, album.Genres),
                     CreatedAt = album.CreatedAt
@@ -129,18 +133,26 @@ namespace MusicService.Application.Search.Queries
 
         private async Task ProcessTracksAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
         {
-            var tracks = await _trackRepository.SearchAsync(searchTerm, cancellationToken);
-            var allArtists = await _artistRepository.GetAllAsync(cancellationToken);
-            var allAlbums = await _albumRepository.GetAllAsync(cancellationToken);
-            
-            foreach (var track in tracks)
+            var tracks = await _dbContext.Tracks
+                .AsNoTracking()
+                .Where(t => EF.Functions.ILike(t.Title, $"%{searchTerm}%"))
+                .Select(t => new
+                {
+                    Track = t,
+                    ArtistName = t.Artist != null ? t.Artist.Name : "Unknown",
+                    AlbumTitle = t.Album != null ? t.Album.Title : "Unknown"
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var item in tracks)
             {
+                var track = item.Track;
                 results.Add(new AdvancedSearchResultDto
                 {
                     Id = track.Id,
                     Type = "track",
                     Title = track.Title,
-                    Subtitle = $"{allArtists.FirstOrDefault(a => a.Id == track.ArtistId)?.Name ?? "Unknown"} • {allAlbums.FirstOrDefault(a => a.Id == track.AlbumId)?.Title ?? "Unknown"}",
+                    Subtitle = $"{item.ArtistName} • {item.AlbumTitle}",
                     Metadata = new Dictionary<string, object>
                     {
                         { "duration", track.DurationSeconds },
@@ -155,21 +167,30 @@ namespace MusicService.Application.Search.Queries
 
         private async Task ProcessPlaylistsAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
         {
-            var playlists = await _playlistRepository.SearchAsync(searchTerm, cancellationToken);
-            var allUsers = await _userRepository.GetAllAsync(cancellationToken);
-            
-            foreach (var playlist in playlists)
+            var playlists = await _dbContext.Playlists
+                .AsNoTracking()
+                .Where(p => EF.Functions.ILike(p.Title, $"%{searchTerm}%"))
+                .Select(p => new
+                {
+                    Playlist = p,
+                    CreatorName = p.CreatedBy != null ? p.CreatedBy.Username : "Unknown",
+                    TrackCount = p.PlaylistTracks.Count
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var item in playlists)
             {
+                var playlist = item.Playlist;
                 results.Add(new AdvancedSearchResultDto
                 {
                     Id = playlist.Id,
                     Type = "playlist",
                     Title = playlist.Title,
-                    Subtitle = allUsers.FirstOrDefault(u => u.Id == playlist.CreatedById)?.Username ?? "Unknown",
+                    Subtitle = item.CreatorName,
                     ImageUrl = playlist.CoverImage,
                     Metadata = new Dictionary<string, object>
                     {
-                        { "trackCount", playlist.PlaylistTracks?.Count ?? 0 },
+                        { "trackCount", item.TrackCount },
                         { "followersCount", playlist.FollowersCount },
                         { "isPublic", playlist.IsPublic }
                     },
@@ -181,8 +202,12 @@ namespace MusicService.Application.Search.Queries
 
         private async Task ProcessUsersAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
         {
-            var users = await _userRepository.SearchUsersAsync(searchTerm, cancellationToken);
-            
+            var users = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => EF.Functions.ILike(u.Username, $"%{searchTerm}%") ||
+                            (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{searchTerm}%")))
+                .ToListAsync(cancellationToken);
+
             foreach (var user in users)
             {
                 results.Add(new AdvancedSearchResultDto

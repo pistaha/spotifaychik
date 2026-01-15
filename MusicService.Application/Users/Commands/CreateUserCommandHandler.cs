@@ -1,10 +1,11 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Common.Interfaces;
-using MusicService.Application.Common.Interfaces.Repositories;
 using MusicService.Application.Users.Dtos;
 using MusicService.Domain.Entities;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,18 +13,18 @@ namespace MusicService.Application.Users.Commands
 {
     public class CreateUserCommandHandler : IRequestHandler<CreateUserCommand, UserDto>
     {
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IMapper _mapper;
         private readonly ILogger<CreateUserCommandHandler> _logger;
 
         public CreateUserCommandHandler(
-            IUserRepository userRepository,
+            IMusicServiceDbContext dbContext,
             IPasswordHasher passwordHasher,
             IMapper mapper,
             ILogger<CreateUserCommandHandler> logger)
         {
-            _userRepository = userRepository;
+            _dbContext = dbContext;
             _passwordHasher = passwordHasher;
             _mapper = mapper;
             _logger = logger;
@@ -33,13 +34,16 @@ namespace MusicService.Application.Users.Commands
         {
             _logger.LogInformation("Creating user: {Username}", request.Username);
 
-            // Проверка уникальности
-            var existingUser = await _userRepository.FindByEmailAsync(request.Email, cancellationToken);
-            if (existingUser != null)
+            var emailExists = await _dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Email == request.Email, cancellationToken);
+            if (emailExists)
                 throw new ArgumentException($"User with email {request.Email} already exists");
 
-            existingUser = await _userRepository.FindByUsernameAsync(request.Username, cancellationToken);
-            if (existingUser != null)
+            var usernameExists = await _dbContext.Users
+                .AsNoTracking()
+                .AnyAsync(u => u.Username == request.Username, cancellationToken);
+            if (usernameExists)
                 throw new ArgumentException($"User with username {request.Username} already exists");
 
             var user = new User
@@ -55,11 +59,12 @@ namespace MusicService.Application.Users.Commands
                 ListenTimeMinutes = 0
             };
 
-            var createdUser = await _userRepository.CreateAsync(user, cancellationToken);
+            _dbContext.Users.Add(user);
+            await _dbContext.SaveChangesAsync(cancellationToken);
             
-            _logger.LogInformation("User {UserId} created successfully", createdUser.Id);
+            _logger.LogInformation("User {UserId} created successfully", user.Id);
             
-            return _mapper.Map<UserDto>(createdUser);
+            return _mapper.Map<UserDto>(user);
         }
     }
 }

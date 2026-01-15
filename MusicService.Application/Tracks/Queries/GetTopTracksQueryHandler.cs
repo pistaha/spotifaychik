@@ -1,7 +1,7 @@
-using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Tracks.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,63 +12,103 @@ namespace MusicService.Application.Tracks.Queries
 {
     public class GetTopTracksQueryHandler : IRequestHandler<GetTopTracksQuery, List<TrackDto>>
     {
-        private readonly ITrackRepository _trackRepository;
-        private readonly IListenHistoryRepository _listenHistoryRepository;
-        private readonly IMapper _mapper;
+        private readonly IMusicServiceDbContext _dbContext;
 
         public GetTopTracksQueryHandler(
-            ITrackRepository trackRepository,
-            IListenHistoryRepository listenHistoryRepository,
-            IMapper mapper)
+            IMusicServiceDbContext dbContext)
         {
-            _trackRepository = trackRepository;
-            _listenHistoryRepository = listenHistoryRepository;
-            _mapper = mapper;
+            _dbContext = dbContext;
         }
 
         public async Task<List<TrackDto>> Handle(GetTopTracksQuery request, CancellationToken cancellationToken)
         {
             List<TrackDto> topTracks;
-            
-            // Если указан временной диапазон, используем историю прослушиваний
+
             if (!string.IsNullOrEmpty(request.TimeRange) && request.TimeRange != "all")
             {
                 var cutoffDate = GetCutoffDate(request.TimeRange);
-                var allHistory = await _listenHistoryRepository.GetAllAsync(cancellationToken);
-                
-                var recentHistory = allHistory
+                var trackData = await _dbContext.ListenHistories
+                    .AsNoTracking()
                     .Where(h => h.ListenedAt >= cutoffDate)
-                    .ToList();
-
-                var trackPlays = recentHistory
                     .GroupBy(h => h.TrackId)
-                    .Select(g => new
-                    {
-                        TrackId = g.Key,
-                        PlayCount = g.Count()
-                    })
-                    .OrderByDescending(x => x.PlayCount)
+                    .Select(g => new { TrackId = g.Key, Plays = g.Count() })
+                    .OrderByDescending(x => x.Plays)
                     .Take(request.Count)
-                    .ToList();
+                    .Join(_dbContext.Tracks.AsNoTracking()
+                            .Include(t => t.Album)
+                            .Include(t => t.Artist)
+                            .AsSplitQuery(),
+                        stats => stats.TrackId,
+                        track => track.Id,
+                        (stats, track) => new
+                        {
+                            track.Id,
+                            track.CreatedAt,
+                            track.UpdatedAt,
+                            track.Title,
+                            track.DurationSeconds,
+                            track.TrackNumber,
+                            track.PlayCount,
+                            track.LikeCount,
+                            track.IsExplicit,
+                            track.AlbumId,
+                            AlbumTitle = track.Album != null ? track.Album.Title : string.Empty,
+                            AlbumCoverImage = track.Album != null ? track.Album.CoverImage : null,
+                            track.ArtistId,
+                            ArtistName = track.Artist != null ? track.Artist.Name : string.Empty
+                        })
+                    .ToListAsync(cancellationToken);
 
-                // Получаем треки по ID
-                var tracks = new List<Domain.Entities.Track>();
-                foreach (var trackPlay in trackPlays)
+                topTracks = trackData.Select(t => new TrackDto
                 {
-                    var track = await _trackRepository.GetByIdAsync(trackPlay.TrackId, cancellationToken);
-                    if (track != null)
-                    {
-                        tracks.Add(track);
-                    }
-                }
-
-                topTracks = _mapper.Map<List<TrackDto>>(tracks);
+                    Id = t.Id,
+                    CreatedAt = t.CreatedAt,
+                    UpdatedAt = t.UpdatedAt,
+                    Title = t.Title,
+                    DurationSeconds = t.DurationSeconds,
+                    DurationFormatted = FormatDuration(t.DurationSeconds),
+                    TrackNumber = t.TrackNumber,
+                    PlayCount = t.PlayCount,
+                    LikeCount = t.LikeCount,
+                    IsExplicit = t.IsExplicit,
+                    IsLiked = false,
+                    AlbumId = t.AlbumId,
+                    AlbumTitle = t.AlbumTitle,
+                    AlbumCoverImage = t.AlbumCoverImage,
+                    ArtistId = t.ArtistId,
+                    ArtistName = t.ArtistName
+                }).ToList();
             }
             else
             {
-                // Используем общий счетчик прослушиваний
-                var tracks = await _trackRepository.GetTopTracksAsync(request.Count, cancellationToken);
-                topTracks = _mapper.Map<List<TrackDto>>(tracks);
+                var tracks = await _dbContext.Tracks
+                    .AsNoTracking()
+                    .Include(t => t.Album)
+                    .Include(t => t.Artist)
+                    .AsSplitQuery()
+                    .OrderByDescending(t => t.PlayCount)
+                    .Take(request.Count)
+                    .ToListAsync(cancellationToken);
+
+                topTracks = tracks.Select(t => new TrackDto
+                {
+                    Id = t.Id,
+                    CreatedAt = t.CreatedAt,
+                    UpdatedAt = t.UpdatedAt,
+                    Title = t.Title,
+                    DurationSeconds = t.DurationSeconds,
+                    DurationFormatted = FormatDuration(t.DurationSeconds),
+                    TrackNumber = t.TrackNumber,
+                    PlayCount = t.PlayCount,
+                    LikeCount = t.LikeCount,
+                    IsExplicit = t.IsExplicit,
+                    IsLiked = false,
+                    AlbumId = t.AlbumId,
+                    AlbumTitle = t.Album != null ? t.Album.Title : string.Empty,
+                    AlbumCoverImage = t.Album?.CoverImage,
+                    ArtistId = t.ArtistId,
+                    ArtistName = t.Artist != null ? t.Artist.Name : string.Empty
+                }).ToList();
             }
 
             return topTracks;
@@ -84,6 +124,12 @@ namespace MusicService.Application.Tracks.Queries
                 "year" => DateTime.UtcNow.AddDays(-365),
                 _ => DateTime.MinValue
             };
+        }
+
+        private static string FormatDuration(int durationSeconds)
+        {
+            var span = TimeSpan.FromSeconds(durationSeconds);
+            return $"{(int)span.TotalMinutes}:{span.Seconds:00}";
         }
     }
 }

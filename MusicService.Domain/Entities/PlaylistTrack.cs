@@ -12,7 +12,7 @@ namespace MusicService.Domain.Entities
         
         public int Position { get; set; }
         public DateTime AddedAt { get; set; }
-        public Guid AddedById { get; set; }
+        public Guid? AddedById { get; set; }
         public User? AddedBy { get; set; }
     }
 }

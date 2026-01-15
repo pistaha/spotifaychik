@@ -1,7 +1,8 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Playlists.Dtos;
 using MusicService.Domain.Entities;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,16 +13,18 @@ namespace MusicService.Application.AI.Queries
 {
     public class GeneratePersonalPlaylistsQueryHandler : IRequestHandler<GeneratePersonalPlaylistsQuery, List<PlaylistDto>>
     {
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
 
-        public GeneratePersonalPlaylistsQueryHandler(IUserRepository userRepository)
+        public GeneratePersonalPlaylistsQueryHandler(IMusicServiceDbContext dbContext)
         {
-            _userRepository = userRepository;
+            _dbContext = dbContext;
         }
 
         public async Task<List<PlaylistDto>> Handle(GeneratePersonalPlaylistsQuery request, CancellationToken cancellationToken)
         {
-            var user = await _userRepository.GetByIdAsync(request.UserId, cancellationToken);
+            var user = await _dbContext.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
             if (user == null)
                 return new List<PlaylistDto>();
 

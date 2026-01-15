@@ -1,8 +1,10 @@
-using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Artists.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,21 +12,41 @@ namespace MusicService.Application.Artists.Queries
 {
     public class GetArtistsByGenreQueryHandler : IRequestHandler<GetArtistsByGenreQuery, List<ArtistDto>>
     {
-        private readonly IArtistRepository _artistRepository;
-        private readonly IMapper _mapper;
+        private readonly IMusicServiceDbContext _dbContext;
 
         public GetArtistsByGenreQueryHandler(
-            IArtistRepository artistRepository,
-            IMapper mapper)
+            IMusicServiceDbContext dbContext)
         {
-            _artistRepository = artistRepository;
-            _mapper = mapper;
+            _dbContext = dbContext;
         }
 
         public async Task<List<ArtistDto>> Handle(GetArtistsByGenreQuery request, CancellationToken cancellationToken)
         {
-            var artists = await _artistRepository.GetArtistsByGenreAsync(request.Genre, cancellationToken);
-            return _mapper.Map<List<ArtistDto>>(artists);
+            var genre = request.Genre.Trim();
+            var nowYear = DateTime.UtcNow.Year;
+            return await _dbContext.Artists
+                .AsNoTracking()
+                .Where(a => a.Genres.Any(g => g == genre))
+                .Select(a => new ArtistDto
+                {
+                    Id = a.Id,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt,
+                    Name = a.Name,
+                    RealName = a.RealName,
+                    Biography = a.Biography,
+                    ProfileImage = a.ProfileImage,
+                    CoverImage = a.CoverImage,
+                    Genres = a.Genres,
+                    Country = a.Country,
+                    IsVerified = a.IsVerified,
+                    MonthlyListeners = a.MonthlyListeners,
+                    AlbumCount = a.Albums.Count,
+                    TrackCount = a.Tracks.Count,
+                    FollowerCount = a.Followers.Count,
+                    YearsActive = a.CareerStartDate.HasValue ? nowYear - a.CareerStartDate.Value.Year : 0
+                })
+                .ToListAsync(cancellationToken);
         }
     }
 }

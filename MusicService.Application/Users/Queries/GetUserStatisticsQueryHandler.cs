@@ -1,8 +1,7 @@
-using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Users.Queries;
+using MusicService.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,29 +12,14 @@ namespace MusicService.Application.Users.Queries
 {
     public class GetUserStatisticsQueryHandler : IRequestHandler<GetUserStatisticsQuery, UserStatisticsDto>
     {
-        private readonly IUserRepository _userRepository;
-        private readonly IPlaylistRepository _playlistRepository;
-        private readonly IListenHistoryRepository _listenHistoryRepository;
-        private readonly IArtistRepository _artistRepository;
-        private readonly ITrackRepository _trackRepository;
-        private readonly IMapper _mapper;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly ILogger<GetUserStatisticsQueryHandler> _logger;
 
         public GetUserStatisticsQueryHandler(
-            IUserRepository userRepository,
-            IPlaylistRepository playlistRepository,
-            IListenHistoryRepository listenHistoryRepository,
-            IArtistRepository artistRepository,
-            ITrackRepository trackRepository,
-            IMapper mapper,
+            IMusicServiceDbContext dbContext,
             ILogger<GetUserStatisticsQueryHandler> logger)
         {
-            _userRepository = userRepository;
-            _playlistRepository = playlistRepository;
-            _listenHistoryRepository = listenHistoryRepository;
-            _artistRepository = artistRepository;
-            _trackRepository = trackRepository;
-            _mapper = mapper;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -47,83 +31,104 @@ namespace MusicService.Application.Users.Queries
 
             try
             {
-                // Получаем пользователя
-                var user = await _userRepository.GetByIdAsync(request.UserId, cancellationToken);
-                if (user == null)
+                var userExists = await _dbContext.Users
+                    .AsNoTracking()
+                    .AnyAsync(u => u.Id == request.UserId, cancellationToken);
+                if (!userExists)
                 {
                     _logger.LogWarning("User {UserId} not found", request.UserId);
                     return statistics;
                 }
 
-                // Получаем плейлисты пользователя
-                var playlists = await _playlistRepository.GetUserPlaylistsAsync(request.UserId, cancellationToken);
-                statistics.TotalPlaylists = playlists.Count;
+                statistics.TotalPlaylists = await _dbContext.Playlists
+                    .AsNoTracking()
+                    .CountAsync(p => p.CreatedById == request.UserId, cancellationToken);
 
-                // Получаем историю прослушиваний
-                var history = await _listenHistoryRepository.GetUserHistoryAsync(
-                    request.UserId,
-                    request.TimeRangeDays.HasValue ? DateTime.UtcNow.AddDays(-request.TimeRangeDays.Value) : null,
-                    null,
-                    cancellationToken);
+                var historyQuery = _dbContext.ListenHistories
+                    .AsNoTracking()
+                    .Where(h => h.UserId == request.UserId);
 
-                if (history.Any())
+                if (request.TimeRangeDays.HasValue)
                 {
-                    // Общее время прослушивания
-                    statistics.TotalListeningTime = history.Sum(h => h.ListenDurationSeconds) / 60;
+                    var cutoff = DateTime.UtcNow.AddDays(-request.TimeRangeDays.Value);
+                    historyQuery = historyQuery.Where(h => h.ListenedAt >= cutoff);
+                }
 
-                    // Даты первого и последнего прослушивания
-                    statistics.FirstListenDate = history.Min(h => h.ListenedAt);
-                    statistics.LastListenDate = history.Max(h => h.ListenedAt);
+                var hasHistory = await historyQuery.AnyAsync(cancellationToken);
+                if (hasHistory)
+                {
+                    statistics.TotalListeningTime = await historyQuery
+                        .SumAsync(h => h.ListenDurationSeconds, cancellationToken) / 60;
 
-                    // Топ треков
-                    var trackStats = history
+                    statistics.FirstListenDate = await historyQuery
+                        .MinAsync(h => h.ListenedAt, cancellationToken);
+                    statistics.LastListenDate = await historyQuery
+                        .MaxAsync(h => h.ListenedAt, cancellationToken);
+
+                    var topTracks = await historyQuery
                         .GroupBy(h => h.TrackId)
-                        .Select(g => new TrackStatisticsDto
-                        {
-                            TrackId = g.Key,
-                            TrackTitle = g.First().Track?.Title ?? "Unknown",
-                            ArtistName = g.First().Track?.Artist?.Name ?? "Unknown",
-                            ListenCount = g.Count(),
-                            LastListenDate = g.Max(h => h.ListenedAt)
-                        })
+                        .Select(g => new { TrackId = g.Key, ListenCount = g.Count(), LastListenDate = g.Max(h => h.ListenedAt) })
                         .OrderByDescending(t => t.ListenCount)
                         .Take(10)
-                        .ToList();
-
-                    statistics.TopTracks = trackStats;
-
-                    // Топ артистов (через треки)
-                        var artistStats = history
-                            .Where(h => h.Track?.ArtistId != null)
-                            .GroupBy(h => h.Track!.ArtistId)
-                            .Select(g => new ArtistStatisticsDto
+                        .Join(_dbContext.Tracks.AsNoTracking().Include(t => t.Artist).AsSplitQuery(),
+                            stats => stats.TrackId,
+                            track => track.Id,
+                            (stats, track) => new TrackStatisticsDto
                             {
-                                ArtistId = g.Key,
-                                ArtistName = g.First().Track?.Artist?.Name ?? "Unknown",
-                                ListenCount = g.Count(),
-                                TotalDuration = g.Sum(h => h.ListenDurationSeconds) / 60
-                        })
+                                TrackId = stats.TrackId,
+                                TrackTitle = track.Title,
+                                ArtistName = track.Artist != null ? track.Artist.Name : "Unknown",
+                                ListenCount = stats.ListenCount,
+                                LastListenDate = stats.LastListenDate
+                            })
+                        .ToListAsync(cancellationToken);
+
+                    statistics.TopTracks = topTracks;
+
+                    var topArtists = await historyQuery
+                        .GroupBy(h => h.Track!.ArtistId)
+                        .Select(g => new { ArtistId = g.Key, ListenCount = g.Count(), TotalDuration = g.Sum(h => h.ListenDurationSeconds) / 60 })
                         .OrderByDescending(a => a.ListenCount)
                         .Take(10)
-                        .ToList();
-
-                    statistics.TopArtists = artistStats;
-
-                    // Топ жанров (из артистов)
-                    var allArtists = await _artistRepository.GetAllAsync(cancellationToken);
-                    var genreCounts = new Dictionary<string, int>();
-
-                    foreach (var artistStat in artistStats)
-                    {
-                        var artist = allArtists.FirstOrDefault(a => a.Id == artistStat.ArtistId);
-                        if (artist != null)
-                        {
-                            foreach (var genre in artist.Genres)
+                        .Join(_dbContext.Artists.AsNoTracking(),
+                            stats => stats.ArtistId,
+                            artist => artist.Id,
+                            (stats, artist) => new ArtistStatisticsDto
                             {
-                                if (genreCounts.ContainsKey(genre))
-                                    genreCounts[genre] += artistStat.ListenCount;
-                                else
-                                    genreCounts[genre] = artistStat.ListenCount;
+                                ArtistId = artist.Id,
+                                ArtistName = artist.Name,
+                                ListenCount = stats.ListenCount,
+                                TotalDuration = stats.TotalDuration
+                            })
+                        .ToListAsync(cancellationToken);
+
+                    statistics.TopArtists = topArtists;
+
+                    var artistIds = topArtists.Select(a => a.ArtistId).ToList();
+                    var artistsWithGenres = await _dbContext.Artists
+                        .AsNoTracking()
+                        .Where(a => artistIds.Contains(a.Id))
+                        .Select(a => new { a.Id, a.Genres })
+                        .ToListAsync(cancellationToken);
+
+                    var genreCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var artistStat in topArtists)
+                    {
+                        var artistGenres = artistsWithGenres.FirstOrDefault(a => a.Id == artistStat.ArtistId)?.Genres;
+                        if (artistGenres == null)
+                        {
+                            continue;
+                        }
+
+                        foreach (var genre in artistGenres)
+                        {
+                            if (genreCounts.ContainsKey(genre))
+                            {
+                                genreCounts[genre] += artistStat.ListenCount;
+                            }
+                            else
+                            {
+                                genreCounts[genre] = artistStat.ListenCount;
                             }
                         }
                     }
@@ -137,13 +142,18 @@ namespace MusicService.Application.Users.Queries
                     statistics.FavoriteGenresCount = statistics.TopGenres.Count;
                 }
 
-                // Количество друзей (подписчиков и подписок)
-                var friends = await _userRepository.GetUserFriendsAsync(request.UserId, cancellationToken);
-                statistics.FollowersCount = friends.Count;
+                var followStats = await _dbContext.Users
+                    .AsNoTracking()
+                    .Where(u => u.Id == request.UserId)
+                    .Select(u => new
+                    {
+                        Followers = u.Friends.Count,
+                        Following = u.FollowedArtists.Count + u.FollowedPlaylists.Count
+                    })
+                    .FirstAsync(cancellationToken);
 
-                // Для FollowingCount нужно считать подписки на артистов и плейлисты
-                // В упрощенной версии считаем только друзей
-                statistics.FollowingCount = statistics.FollowersCount;
+                statistics.FollowersCount = followStats.Followers;
+                statistics.FollowingCount = followStats.Following;
 
                 _logger.LogInformation("Statistics retrieved successfully for user {UserId}", request.UserId);
             }

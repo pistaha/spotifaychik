@@ -1,7 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,14 +11,14 @@ namespace MusicService.Application.Users.Commands
 {
     public class AddFriendCommandHandler : IRequestHandler<AddFriendCommand, bool>
     {
-        private readonly IUserRepository _userRepository;
+        private readonly IMusicServiceDbContext _dbContext;
         private readonly ILogger<AddFriendCommandHandler> _logger;
 
         public AddFriendCommandHandler(
-            IUserRepository userRepository,
+            IMusicServiceDbContext dbContext,
             ILogger<AddFriendCommandHandler> logger)
         {
-            _userRepository = userRepository;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -27,9 +29,11 @@ namespace MusicService.Application.Users.Commands
             
             try
             {
-                // Проверяем, что пользователи существуют
-                var user = await _userRepository.GetByIdAsync(request.UserId, cancellationToken);
-                var friend = await _userRepository.GetByIdAsync(request.FriendId, cancellationToken);
+                var user = await _dbContext.Users
+                    .Include(u => u.Friends)
+                    .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+                var friend = await _dbContext.Users
+                    .FirstOrDefaultAsync(u => u.Id == request.FriendId, cancellationToken);
                 
                 if (user == null)
                 {
@@ -49,27 +53,17 @@ namespace MusicService.Application.Users.Commands
                     return false;
                 }
                 
-                // Проверяем, не являются ли они уже друзьями
-                var friends = await _userRepository.GetUserFriendsAsync(request.UserId, cancellationToken);
-                if (friends.Any(f => f.Id == request.FriendId))
+                if (user.Friends.Any(f => f.Id == request.FriendId))
                 {
                     _logger.LogInformation("Users are already friends");
                     return true; // Уже друзья, считаем операцию успешной
                 }
                 
-                // Добавляем друга
-                var result = await _userRepository.AddFriendAsync(request.UserId, request.FriendId, cancellationToken);
-                
-                if (result)
-                {
-                    _logger.LogInformation("Friend added successfully");
-                }
-                else
-                {
-                    _logger.LogWarning("Failed to add friend");
-                }
-                
-                return result;
+                user.Friends.Add(friend);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation("Friend added successfully");
+                return true;
             }
             catch (Exception ex)
             {

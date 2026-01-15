@@ -1,7 +1,7 @@
-using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Playlists.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -11,28 +11,62 @@ namespace MusicService.Application.Playlists.Queries
 {
     public class GetUserPlaylistsQueryHandler : IRequestHandler<GetUserPlaylistsQuery, List<PlaylistDto>>
     {
-        private readonly IPlaylistRepository _playlistRepository;
-        private readonly IMapper _mapper;
+        private readonly IMusicServiceDbContext _dbContext;
 
         public GetUserPlaylistsQueryHandler(
-            IPlaylistRepository playlistRepository,
-            IMapper mapper)
+            IMusicServiceDbContext dbContext)
         {
-            _playlistRepository = playlistRepository;
-            _mapper = mapper;
+            _dbContext = dbContext;
         }
 
         public async Task<List<PlaylistDto>> Handle(GetUserPlaylistsQuery request, CancellationToken cancellationToken)
         {
-            var playlists = await _playlistRepository.GetUserPlaylistsAsync(request.UserId, cancellationToken);
+            var query = _dbContext.Playlists
+                .AsNoTracking()
+                .Where(p => p.CreatedById == request.UserId);
             
-            // Фильтруем приватные плейлисты, если не включен флаг
             if (!request.IncludePrivate)
             {
-                playlists = playlists.Where(p => p.IsPublic).ToList();
+                query = query.Where(p => p.IsPublic);
             }
 
-            return _mapper.Map<List<PlaylistDto>>(playlists);
+            var rawItems = await query
+                .Select(p => new
+                {
+                    p.Id,
+                    p.CreatedAt,
+                    p.UpdatedAt,
+                    p.Title,
+                    p.Description,
+                    p.CoverImage,
+                    p.IsPublic,
+                    p.IsCollaborative,
+                    p.Type,
+                    p.FollowersCount,
+                    p.TotalDurationMinutes,
+                    TrackCount = p.PlaylistTracks.Count,
+                    p.CreatedById,
+                    CreatedByName = p.CreatedBy != null ? p.CreatedBy.Username : string.Empty
+                })
+                .ToListAsync(cancellationToken);
+
+            return rawItems.Select(p => new PlaylistDto
+            {
+                Id = p.Id,
+                CreatedAt = p.CreatedAt,
+                UpdatedAt = p.UpdatedAt,
+                Title = p.Title,
+                Description = p.Description,
+                CoverImage = p.CoverImage,
+                IsPublic = p.IsPublic,
+                IsCollaborative = p.IsCollaborative,
+                Type = p.Type.ToString(),
+                FollowersCount = p.FollowersCount,
+                TotalDurationMinutes = p.TotalDurationMinutes,
+                TrackCount = p.TrackCount,
+                CreatedById = p.CreatedById,
+                CreatedByName = p.CreatedByName
+            }).ToList();
         }
     }
 }

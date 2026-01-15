@@ -14,6 +14,7 @@ namespace MusicService.Domain.Entities
         public int PlayCount { get; set; }
         public int LikeCount { get; set; }
         public bool IsExplicit { get; set; }
+        public decimal PopularityScore { get; set; }
         
         // Связи
         public Guid AlbumId { get; set; }

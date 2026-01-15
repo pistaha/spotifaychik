@@ -3,41 +3,40 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Common.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
+using MusicService.Application.Common.Interfaces;
 
 namespace MusicService.Application.Albums.Queries
 {
     public class GetAlbumsQueryHandler : IRequestHandler<GetAlbumsQuery, PagedResult<AlbumDto>>
     {
-        private readonly IAlbumRepository _albumRepository;
-        private readonly IMapper _mapper;
+        private readonly IMusicServiceDbContext _dbContext;
 
-        public GetAlbumsQueryHandler(IAlbumRepository albumRepository, IMapper mapper)
+        public GetAlbumsQueryHandler(IMusicServiceDbContext dbContext)
         {
-            _albumRepository = albumRepository;
-            _mapper = mapper;
+            _dbContext = dbContext;
         }
 
         public async Task<PagedResult<AlbumDto>> Handle(GetAlbumsQuery request, CancellationToken cancellationToken)
         {
-            var albums = await _albumRepository.GetAllAsync(cancellationToken);
-            IEnumerable<Domain.Entities.Album> query = albums;
+            var recentThreshold = DateTime.UtcNow.AddDays(-30);
+            IQueryable<Domain.Entities.Album> query = _dbContext.Albums.AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
+                var search = request.Search.Trim();
                 query = query.Where(a =>
-                    a.Title.Contains(request.Search, StringComparison.OrdinalIgnoreCase) ||
-                    (!string.IsNullOrEmpty(a.Description) && a.Description.Contains(request.Search, StringComparison.OrdinalIgnoreCase)));
+                    EF.Functions.ILike(a.Title, $"%{search}%") ||
+                    (a.Description != null && EF.Functions.ILike(a.Description, $"%{search}%")));
             }
 
             if (!string.IsNullOrWhiteSpace(request.Genre))
             {
-                query = query.Where(a =>
-                    a.Genres.Any(g => g.Equals(request.Genre, StringComparison.OrdinalIgnoreCase)));
+                var genre = request.Genre.Trim();
+                query = query.Where(a => a.Genres.Any(g => g == genre));
             }
 
             query = (request.SortBy?.ToLowerInvariant()) switch
@@ -53,14 +52,48 @@ namespace MusicService.Application.Albums.Queries
                     : query.OrderByDescending(a => a.CreatedAt)
             };
 
-            var totalCount = query.Count();
-            var items = query
+            var totalCount = await query.CountAsync(cancellationToken);
+            var rawItems = await query
                 .Skip(Math.Max(0, (request.Page - 1) * request.PageSize))
                 .Take(request.PageSize)
-                .ToList();
+                .Select(a => new
+                {
+                    a.Id,
+                    a.CreatedAt,
+                    a.UpdatedAt,
+                    a.Title,
+                    a.Description,
+                    a.CoverImage,
+                    a.ReleaseDate,
+                    a.Type,
+                    a.Genres,
+                    a.TotalDurationMinutes,
+                    TrackCount = a.Tracks.Count,
+                    a.ArtistId,
+                    ArtistName = a.Artist != null ? a.Artist.Name : string.Empty
+                })
+                .ToListAsync(cancellationToken);
 
-            var dtoItems = _mapper.Map<List<AlbumDto>>(items);
-            return new PagedResult<AlbumDto>(dtoItems, totalCount, request.Page, request.PageSize);
+            var items = rawItems.Select(a => new AlbumDto
+            {
+                Id = a.Id,
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt,
+                Title = a.Title,
+                Description = a.Description,
+                CoverImage = a.CoverImage,
+                ReleaseDate = a.ReleaseDate,
+                Type = a.Type.ToString(),
+                Genres = a.Genres,
+                TotalDurationMinutes = a.TotalDurationMinutes,
+                TrackCount = a.TrackCount,
+                ArtistId = a.ArtistId,
+                ArtistName = a.ArtistName,
+                Tracks = new List<MusicService.Application.Tracks.Dtos.TrackDto>(),
+                IsRecentRelease = a.ReleaseDate >= recentThreshold
+            }).ToList();
+
+            return new PagedResult<AlbumDto>(items, totalCount, request.Page, request.PageSize);
         }
     }
 }

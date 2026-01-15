@@ -25,6 +25,7 @@ namespace MusicService.Domain.Entities
         public List<Album> FavoriteAlbums { get; set; } = new();
         public List<User> Friends { get; set; } = new();
         public List<ListenHistory> ListenHistory { get; set; } = new();
+        public List<UserRole> UserRoles { get; set; } = new();
 
         public void AddListenTime(int minutes)
         {
