@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
 using AutoMapper;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Common.Dtos;
 using MusicService.Application.Common.Interfaces;
@@ -102,12 +104,21 @@ namespace MusicService.Application.Users.Commands
 
             if (usersToCreate.Count > 0)
             {
-                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+                IDbContextTransaction? transaction = null;
                 try
                 {
+                    var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                    if (!isInMemory)
+                    {
+                        transaction = await _dbContext.Database.BeginTransactionAsync(
+                            IsolationLevel.Serializable, cancellationToken);
+                    }
                     _dbContext.Users.AddRange(usersToCreate);
                     await _dbContext.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
+                    if (transaction != null)
+                    {
+                        await transaction.CommitAsync(cancellationToken);
+                    }
 
                     foreach (var user in usersToCreate)
                     {
@@ -123,7 +134,10 @@ namespace MusicService.Application.Users.Commands
                 }
                 catch (Exception ex)
                 {
-                    await transaction.RollbackAsync(cancellationToken);
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
                     _logger.LogError(ex, "Failed to save users during bulk operation");
                     foreach (var user in usersToCreate)
                     {
@@ -133,6 +147,13 @@ namespace MusicService.Application.Users.Commands
                             Message = $"Error creating user {user.Username}",
                             Error = ex.Message
                         });
+                    }
+                }
+                finally
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.DisposeAsync();
                     }
                 }
             }

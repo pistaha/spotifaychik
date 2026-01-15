@@ -1,6 +1,7 @@
 using AutoMapper;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Common.Dtos;
@@ -67,12 +68,6 @@ namespace MusicService.Application.Albums.Commands
                     };
 
                     albumsToCreate.Add(album);
-                    result.Items.Add(new BulkOperationItem<AlbumDto>
-                    {
-                        Success = true,
-                        Message = "Album queued for creation",
-                        Data = _mapper.Map<AlbumDto>(album)
-                    });
                 }
                 catch (Exception ex)
                 {
@@ -85,26 +80,60 @@ namespace MusicService.Application.Albums.Commands
                 }
             }
 
-            var createdAlbums = new List<AlbumDto>();
             if (albumsToCreate.Count > 0)
             {
-                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+                IDbContextTransaction? transaction = null;
                 try
                 {
+                    var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                    if (!isInMemory)
+                    {
+                        transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+                    }
                     _dbContext.Albums.AddRange(albumsToCreate);
                     await _dbContext.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
-                    createdAlbums.AddRange(albumsToCreate.Select(a => _mapper.Map<AlbumDto>(a)));
+                    if (transaction != null)
+                    {
+                        await transaction.CommitAsync(cancellationToken);
+                    }
+                    foreach (var album in albumsToCreate)
+                    {
+                        result.Items.Add(new BulkOperationItem<AlbumDto>
+                        {
+                            Success = true,
+                            Message = "Album created successfully",
+                            Data = _mapper.Map<AlbumDto>(album)
+                        });
+                    }
                 }
                 catch (Exception ex)
                 {
-                    await transaction.RollbackAsync(cancellationToken);
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
                     _logger.LogError(ex, "Error creating albums in bulk operation");
+                    foreach (var album in albumsToCreate)
+                    {
+                        result.Items.Add(new BulkOperationItem<AlbumDto>
+                        {
+                            Success = false,
+                            Message = "Error creating album",
+                            Error = ex.Message
+                        });
+                    }
+                }
+                finally
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.DisposeAsync();
+                    }
                 }
             }
 
             result.TotalCount = request.Commands.Count;
-            result.SuccessfulCount = createdAlbums.Count;
+            result.SuccessfulCount = result.Items.Count(i => i.Success);
             result.FailedCount = result.TotalCount - result.SuccessfulCount;
 
             _logger.LogInformation("Bulk album creation completed: {SuccessfulCount} successful, {FailedCount} failed", 

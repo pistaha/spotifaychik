@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Common.Dtos;
 using MusicService.Application.Common.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -32,27 +35,54 @@ namespace MusicService.Application.Albums.Commands
                 TotalCount = request.AlbumIds.Count
             };
 
+            var albums = await _dbContext.Albums
+                .Where(a => request.AlbumIds.Contains(a.Id))
+                .ToListAsync(cancellationToken);
+
+            var foundIds = new HashSet<Guid>(albums.Select(a => a.Id));
             foreach (var albumId in request.AlbumIds)
             {
-                try
+                if (foundIds.Contains(albumId))
                 {
-                    var album = await _dbContext.Albums
-                        .FirstOrDefaultAsync(a => a.Id == albumId, cancellationToken);
-                    if (album == null)
-                    {
-                        result.Items.Add(new BulkDeleteItem
-                        {
-                            Id = albumId,
-                            Success = false,
-                            Message = "Album not found",
-                            Error = "Album not found"
-                        });
-                        result.FailedCount++;
-                        continue;
-                    }
+                    continue;
+                }
 
-                    _dbContext.Albums.Remove(album);
-                    await _dbContext.SaveChangesAsync(cancellationToken);
+                result.Items.Add(new BulkDeleteItem
+                {
+                    Id = albumId,
+                    Success = false,
+                    Message = "Album not found",
+                    Error = "Album not found"
+                });
+                result.FailedCount++;
+            }
+
+            if (result.FailedCount > 0)
+            {
+                _logger.LogInformation("Bulk album deletion completed: {SuccessfulCount} successful, {FailedCount} failed",
+                    result.SuccessfulCount, result.FailedCount);
+                return result;
+            }
+
+            IDbContextTransaction? transaction = null;
+            try
+            {
+                var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                if (!isInMemory)
+                {
+                    transaction = await _dbContext.Database.BeginTransactionAsync(
+                        IsolationLevel.Serializable, cancellationToken);
+                }
+
+                _dbContext.Albums.RemoveRange(albums);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                }
+
+                foreach (var albumId in request.AlbumIds)
+                {
                     result.Items.Add(new BulkDeleteItem
                     {
                         Id = albumId,
@@ -61,9 +91,16 @@ namespace MusicService.Application.Albums.Commands
                     });
                     result.SuccessfulCount++;
                 }
-                catch (Exception ex)
+            }
+            catch (Exception ex)
+            {
+                if (transaction != null)
                 {
-                    _logger.LogError(ex, "Error deleting album {AlbumId} in bulk operation", albumId);
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                _logger.LogError(ex, "Error deleting albums in bulk operation");
+                foreach (var albumId in request.AlbumIds)
+                {
                     result.Items.Add(new BulkDeleteItem
                     {
                         Id = albumId,
@@ -74,8 +111,15 @@ namespace MusicService.Application.Albums.Commands
                     result.FailedCount++;
                 }
             }
+            finally
+            {
+                if (transaction != null)
+                {
+                    await transaction.DisposeAsync();
+                }
+            }
 
-            _logger.LogInformation("Bulk album deletion completed: {SuccessfulCount} successful, {FailedCount} failed", 
+            _logger.LogInformation("Bulk album deletion completed: {SuccessfulCount} successful, {FailedCount} failed",
                 result.SuccessfulCount, result.FailedCount);
 
             return result;

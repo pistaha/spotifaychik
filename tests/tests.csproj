@@ -28,6 +28,10 @@
 
     <ItemGroup>
         <Compile Include="EFCoreTests/**/*.cs" />
+        <Compile Include="MusicService.API.Tests/**/*.cs" />
+        <Compile Include="MusicService.Application.Tests/**/*.cs" />
+        <Compile Include="MusicService.Infrastructure.Tests/**/*.cs" />
+        <Compile Include="TestUtilities/**/*.cs" />
     </ItemGroup>
 
     <ItemGroup>
