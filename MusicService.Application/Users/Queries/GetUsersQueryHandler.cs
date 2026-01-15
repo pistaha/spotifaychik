@@ -27,10 +27,22 @@ namespace MusicService.Application.Users.Queries
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
                 var search = request.Search.Trim();
-                query = query.Where(u =>
-                    EF.Functions.ILike(u.Username, $"%{search}%") ||
-                    (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{search}%")) ||
-                    EF.Functions.ILike(u.Email, $"%{search}%"));
+                var isPostgres = _dbContext.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL";
+                if (isPostgres)
+                {
+                    query = query.Where(u =>
+                        EF.Functions.ILike(u.Username, $"%{search}%") ||
+                        (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{search}%")) ||
+                        EF.Functions.ILike(u.Email, $"%{search}%"));
+                }
+                else
+                {
+                    var searchLower = search.ToLowerInvariant();
+                    query = query.Where(u =>
+                        EF.Functions.Like(u.Username.ToLower(), $"%{searchLower}%") ||
+                        (u.DisplayName != null && EF.Functions.Like(u.DisplayName.ToLower(), $"%{searchLower}%")) ||
+                        EF.Functions.Like(u.Email.ToLower(), $"%{searchLower}%"));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(request.Country))

@@ -8,10 +8,13 @@ namespace Tests.EFCoreTests
         public static MusicServiceDbContext Create(string databaseName)
         {
             var options = new DbContextOptionsBuilder<MusicServiceDbContext>()
-                .UseInMemoryDatabase(databaseName)
+                .UseSqlite("DataSource=:memory:")
                 .Options;
 
-            return new MusicServiceDbContext(options);
+            var context = new MusicServiceDbContext(options);
+            context.Database.OpenConnection();
+            context.Database.EnsureCreated();
+            return context;
         }
     }
 }

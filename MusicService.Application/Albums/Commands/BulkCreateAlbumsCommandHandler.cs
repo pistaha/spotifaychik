@@ -1,7 +1,9 @@
 using AutoMapper;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using MusicService.Application.Common;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Common.Dtos;
 using MusicService.Domain.Entities;
@@ -34,83 +36,235 @@ namespace MusicService.Application.Albums.Commands
         {
             _logger.LogInformation("Bulk creating {Count} albums", request.Commands.Count);
 
-            var result = new BulkOperationResult<AlbumDto>();
-            var albumsToCreate = new List<Album>();
-
-            foreach (var command in request.Commands)
+            var result = new BulkOperationResult<AlbumDto>
             {
+                TotalCount = request.Commands.Count
+            };
+
+            var commandsToProcess = request.Commands.ToList();
+            var maxAttempts = 3;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                IDbContextTransaction? transaction = null;
+                var attemptItems = new List<BulkOperationItem<AlbumDto>>();
+                var successfulCount = 0;
+                var processedCommands = 0;
+
                 try
                 {
-                    var artistExists = await _dbContext.Artists
-                        .AsNoTracking()
-                        .AnyAsync(a => a.Id == command.ArtistId, cancellationToken);
-                    if (!artistExists)
+                    var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                    var isPostgres = _dbContext.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL";
+                    if (!isInMemory)
                     {
-                        result.Items.Add(new BulkOperationItem<AlbumDto>
+                        transaction = await _dbContext.Database.BeginTransactionAsync(
+                            System.Data.IsolationLevel.Serializable, cancellationToken);
+                    }
+
+                    var supportsSavepoints = transaction?.SupportsSavepoints == true;
+                    var artistIds = commandsToProcess.Select(c => c.ArtistId).Distinct().ToList();
+                    var existingArtistIds = await _dbContext.Artists
+                        .AsNoTracking()
+                        .Where(a => artistIds.Contains(a.Id))
+                        .Select(a => a.Id)
+                        .ToListAsync(cancellationToken);
+                    var existingSet = new HashSet<Guid>(existingArtistIds);
+
+                    var itemIndex = 0;
+                    foreach (var command in commandsToProcess)
+                    {
+                        processedCommands++;
+                        var savepointName = $"album_{itemIndex++}";
+                        if (supportsSavepoints && transaction != null)
                         {
-                            Success = false,
-                            Message = $"Artist with ID {command.ArtistId} not found",
-                            Error = "Artist not found"
-                        });
+                            await transaction.CreateSavepointAsync(savepointName, cancellationToken);
+                        }
+
+                        if (!existingSet.Contains(command.ArtistId))
+                        {
+                            if (supportsSavepoints && transaction != null)
+                            {
+                                await transaction.ReleaseSavepointAsync(savepointName, cancellationToken);
+                            }
+                            attemptItems.Add(new BulkOperationItem<AlbumDto>
+                            {
+                                Success = false,
+                                Message = $"Artist with ID {command.ArtistId} not found",
+                                Error = "Artist not found"
+                            });
+                            continue;
+                        }
+
+                        Album? album = null;
+                        try
+                        {
+                            if (!Enum.TryParse<AlbumType>(command.Type, true, out var albumType))
+                            {
+                                _logger.LogWarning("Invalid album type {Type} for Title={Title} ArtistId={ArtistId}",
+                                    command.Type, command.Title, command.ArtistId);
+                                if (supportsSavepoints && transaction != null)
+                                {
+                                    await transaction.ReleaseSavepointAsync(savepointName, cancellationToken);
+                                }
+                                attemptItems.Add(new BulkOperationItem<AlbumDto>
+                                {
+                                    Success = false,
+                                    Message = $"Invalid album type {command.Type}",
+                                    Error = "Invalid album type"
+                                });
+                                continue;
+                            }
+
+                            var now = DateTime.UtcNow;
+                            var genres = command.Genres ?? new List<string>();
+                            album = new Album
+                            {
+                                Id = Guid.NewGuid(),
+                                Title = command.Title,
+                                Description = command.Description,
+                                CoverImage = command.CoverImage,
+                                ReleaseDate = command.ReleaseDate,
+                                Type = albumType,
+                                Genres = genres,
+                                ArtistId = command.ArtistId,
+                                TotalDurationMinutes = 0,
+                                CreatedAt = now,
+                                UpdatedAt = now
+                            };
+
+                            if (isPostgres)
+                            {
+                                var rows = await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO albums (""Id"", ""Title"", ""Description"", ""CoverImage"", ""ReleaseDate"", ""Type"", ""Genres"", ""TotalDurationMinutes"", ""ArtistId"", ""CreatedAt"", ""UpdatedAt"")
+VALUES ({album.Id}, {album.Title}, {album.Description}, {album.CoverImage}, {album.ReleaseDate}, {(int)album.Type}, {genres.ToArray()}, {album.TotalDurationMinutes}, {album.ArtistId}, {album.CreatedAt}, {album.UpdatedAt})
+ON CONFLICT DO NOTHING;");
+                                if (rows == 0)
+                                {
+                                    if (supportsSavepoints && transaction != null)
+                                    {
+                                        await transaction.ReleaseSavepointAsync(savepointName, cancellationToken);
+                                    }
+                                    attemptItems.Add(new BulkOperationItem<AlbumDto>
+                                    {
+                                        Success = false,
+                                        Message = $"Album {command.Title} already exists",
+                                        Error = "Album already exists"
+                                    });
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                _dbContext.Albums.Add(album);
+                                await _dbContext.SaveChangesAsync(cancellationToken);
+                            }
+
+                            if (supportsSavepoints && transaction != null)
+                            {
+                                await transaction.ReleaseSavepointAsync(savepointName, cancellationToken);
+                            }
+
+                            attemptItems.Add(new BulkOperationItem<AlbumDto>
+                            {
+                                Success = true,
+                                Message = "Album created successfully",
+                                Data = _mapper.Map<AlbumDto>(album)
+                            });
+                            successfulCount++;
+                        }
+                        catch (Exception ex)
+                        {
+                            if (supportsSavepoints && transaction != null)
+                            {
+                                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
+                            }
+
+                            if (DatabaseErrorDetector.IsTransient(ex))
+                            {
+                                throw;
+                            }
+
+                            if (!isPostgres && album != null)
+                            {
+                                if (_dbContext is DbContext context)
+                                {
+                                    context.Entry(album).State = EntityState.Detached;
+                                }
+                            }
+
+                            _logger.LogWarning(ex, "Error processing album payload Title={Title} ArtistId={ArtistId}",
+                                command.Title, command.ArtistId);
+                            attemptItems.Add(new BulkOperationItem<AlbumDto>
+                            {
+                                Success = false,
+                                Message = $"Error processing album {command.Title}",
+                                Error = DatabaseErrorDetector.IsUniqueViolation(ex)
+                                    ? "Album already exists"
+                                    : DatabaseErrorDetector.IsForeignKeyViolation(ex)
+                                        ? "Artist not found"
+                                        : ex.Message
+                            });
+                        }
+                    }
+
+                    if (transaction != null)
+                    {
+                        await transaction.CommitAsync(cancellationToken);
+                    }
+
+                    result.Items = attemptItems;
+                    result.SuccessfulCount = successfulCount;
+                    result.FailedCount = result.TotalCount - result.SuccessfulCount;
+
+                    _logger.LogInformation("Bulk album creation completed: {SuccessfulCount} successful, {FailedCount} failed", 
+                        result.SuccessfulCount, result.FailedCount);
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
+
+                    if (DatabaseErrorDetector.IsTransient(ex) && attempt < maxAttempts)
+                    {
+                        await DelayAsync(attempt, cancellationToken);
                         continue;
                     }
 
-                    var album = new Album
-                    {
-                        Title = command.Title,
-                        Description = command.Description,
-                        CoverImage = command.CoverImage,
-                        ReleaseDate = command.ReleaseDate,
-                        Type = Enum.Parse<AlbumType>(command.Type),
-                        Genres = command.Genres,
-                        ArtistId = command.ArtistId
-                    };
-
-                    albumsToCreate.Add(album);
-                    result.Items.Add(new BulkOperationItem<AlbumDto>
-                    {
-                        Success = true,
-                        Message = "Album queued for creation",
-                        Data = _mapper.Map<AlbumDto>(album)
-                    });
-                }
-                catch (Exception ex)
-                {
-                    result.Items.Add(new BulkOperationItem<AlbumDto>
-                    {
-                        Success = false,
-                        Message = "Error processing album",
-                        Error = ex.Message
-                    });
-                }
-            }
-
-            var createdAlbums = new List<AlbumDto>();
-            if (albumsToCreate.Count > 0)
-            {
-                await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-                try
-                {
-                    _dbContext.Albums.AddRange(albumsToCreate);
-                    await _dbContext.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
-                    createdAlbums.AddRange(albumsToCreate.Select(a => _mapper.Map<AlbumDto>(a)));
-                }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
                     _logger.LogError(ex, "Error creating albums in bulk operation");
+                    for (var index = processedCommands; index < commandsToProcess.Count; index++)
+                    {
+                        var command = commandsToProcess[index];
+                        attemptItems.Add(new BulkOperationItem<AlbumDto>
+                        {
+                            Success = false,
+                            Message = $"Error creating album {command.Title}",
+                            Error = ex.Message
+                        });
+                    }
+
+                    result.Items = attemptItems;
+                    result.SuccessfulCount = successfulCount;
+                    result.FailedCount = result.TotalCount - result.SuccessfulCount;
+                    return result;
+                }
+                finally
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.DisposeAsync();
+                    }
                 }
             }
-
-            result.TotalCount = request.Commands.Count;
-            result.SuccessfulCount = createdAlbums.Count;
-            result.FailedCount = result.TotalCount - result.SuccessfulCount;
-
-            _logger.LogInformation("Bulk album creation completed: {SuccessfulCount} successful, {FailedCount} failed", 
-                result.SuccessfulCount, result.FailedCount);
 
             return result;
+        }
+
+        private static Task DelayAsync(int attempt, CancellationToken cancellationToken)
+        {
+            var delayMs = 50 * (int)Math.Pow(2, attempt - 1);
+            return Task.Delay(delayMs, cancellationToken);
         }
     }
 }

@@ -1,5 +1,9 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using MusicService.API.Authentication;
+using MusicService.API.Models;
 using MusicService.Application.Artists.Dtos;
 using MusicService.Application.Common;
 using MusicService.Application.Common.Dtos;
@@ -9,18 +13,28 @@ using MusicService.Application.Users.Commands;
 using MusicService.Application.Users.Dtos;
 using MusicService.Application.Users.Queries;
 using MusicService.Application.Tracks.Dtos;
+using System.Collections.Generic;
+using System.Security.Claims;
 
 namespace MusicService.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class UsersController : ControllerBase
     {
         private readonly IMediator _mediator;
+        private readonly IJwtTokenService _tokenService;
+        private readonly JwtSettings _jwtSettings;
 
-        public UsersController(IMediator mediator)
+        public UsersController(
+            IMediator mediator,
+            IJwtTokenService tokenService,
+            IOptions<JwtSettings> jwtOptions)
         {
             _mediator = mediator;
+            _tokenService = tokenService;
+            _jwtSettings = jwtOptions.Value;
         }
 
         [HttpGet("{id:guid}")]
@@ -40,15 +54,34 @@ namespace MusicService.API.Controllers
         }
 
         [HttpPost]
-        [ProducesResponseType(typeof(ApiResponse<UserDto>), 201)]
-        [ProducesResponseType(typeof(ApiResponse<UserDto>), 400)]
-        public async Task<ActionResult<ApiResponse<UserDto>>> CreateUser(
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(ApiResponse<RegisterUserResponse>), 201)]
+        [ProducesResponseType(typeof(ApiResponse<RegisterUserResponse>), 400)]
+        public async Task<ActionResult<ApiResponse<RegisterUserResponse>>> CreateUser(
             [FromBody] CreateUserCommand command, 
             CancellationToken cancellationToken = default)
         {
             var result = await _mediator.Send(command, cancellationToken);
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, result.Id.ToString()),
+                new Claim(ClaimTypes.Name, result.Username),
+                new Claim(ClaimTypes.Email, result.Email)
+            };
+            var token = _tokenService.CreateToken(claims);
+            var response = new RegisterUserResponse
+            {
+                User = result,
+                Token = new AuthTokenResponse
+                {
+                    AccessToken = token,
+                    TokenType = "Bearer",
+                    ExpiresInMinutes = _jwtSettings.ExpiresMinutes
+                }
+            };
+
             return CreatedAtAction(nameof(GetUser), new { id = result.Id }, 
-                ApiResponse<UserDto>.SuccessResult(result, "User created successfully"));
+                ApiResponse<RegisterUserResponse>.SuccessResult(response, "User created successfully"));
         }
 
         [HttpPost("bulk")]
@@ -76,6 +109,8 @@ namespace MusicService.API.Controllers
         [HttpPost("{id:guid}/friends/{friendId:guid}")]
         [ProducesResponseType(typeof(ApiResponse<bool>), 200)]
         [ProducesResponseType(typeof(ApiResponse<bool>), 400)]
+        [ProducesResponseType(typeof(ApiResponse<bool>), 404)]
+        [ProducesResponseType(typeof(ApiResponse<bool>), 409)]
         public async Task<ActionResult<ApiResponse<bool>>> AddFriend(
             Guid id, 
             Guid friendId, 
@@ -88,7 +123,18 @@ namespace MusicService.API.Controllers
             };
             
             var result = await _mediator.Send(command, cancellationToken);
-            return Ok(ApiResponse<bool>.SuccessResult(result, "Friend added successfully"));
+            if (result.Success)
+            {
+                return Ok(ApiResponse<bool>.SuccessResult(true, "Friend added successfully"));
+            }
+
+            return result.Status switch
+            {
+                AddFriendStatus.UserNotFound => NotFound(ApiResponse<bool>.ErrorResult("User not found")),
+                AddFriendStatus.FriendNotFound => NotFound(ApiResponse<bool>.ErrorResult("Friend not found")),
+                AddFriendStatus.AlreadyFriends => Conflict(ApiResponse<bool>.ErrorResult("Users are already friends")),
+                _ => BadRequest(ApiResponse<bool>.ErrorResult("Unable to add friend"))
+            };
         }
 
         [HttpGet("{id:guid}/statistics")]

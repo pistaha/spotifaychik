@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MusicService.Application.Albums.Commands;
 using MusicService.Application.Albums.Dtos;
@@ -10,6 +11,7 @@ namespace MusicService.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class AlbumsController : ControllerBase
     {
         private readonly IMediator _mediator;

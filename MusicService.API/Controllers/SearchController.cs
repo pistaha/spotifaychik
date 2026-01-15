@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MusicService.Application.Common;
 using MusicService.Application.Common.Dtos;
@@ -9,6 +10,7 @@ namespace MusicService.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class SearchController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -304,7 +304,6 @@ namespace MusicService.Infrastructure.Persistence
                         join.HasKey("user_id", "friend_id");
                     });
 
-            SeedData(modelBuilder);
         }
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -330,56 +329,5 @@ namespace MusicService.Infrastructure.Persistence
             return base.SaveChangesAsync(cancellationToken);
         }
 
-        private static void SeedData(ModelBuilder modelBuilder)
-        {
-            var adminRoleId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-            var userRoleId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-
-            var adminUserId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-            var demoUserId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-
-            var seedTime = new DateTime(2026, 1, 12, 0, 0, 0, DateTimeKind.Utc);
-
-            modelBuilder.Entity<Role>().HasData(
-                new Role { Id = adminRoleId, Name = "Admin", Description = "System administrator", CreatedAt = seedTime, UpdatedAt = seedTime },
-                new Role { Id = userRoleId, Name = "User", Description = "Default user", CreatedAt = seedTime, UpdatedAt = seedTime }
-            );
-
-            modelBuilder.Entity<User>().HasData(
-                new User
-                {
-                    Id = adminUserId,
-                    Username = "admin",
-                    Email = "admin@music.local",
-                    PasswordHash = "demo",
-                    DisplayName = "Administrator",
-                    Country = "Unknown",
-                    ListenTimeMinutes = 0,
-                    LastLogin = seedTime,
-                    CreatedAt = seedTime,
-                    UpdatedAt = seedTime,
-                    FavoriteGenres = new List<string>()
-                },
-                new User
-                {
-                    Id = demoUserId,
-                    Username = "demo",
-                    Email = "demo@music.local",
-                    PasswordHash = "demo",
-                    DisplayName = "Demo User",
-                    Country = "Unknown",
-                    ListenTimeMinutes = 0,
-                    LastLogin = seedTime,
-                    CreatedAt = seedTime,
-                    UpdatedAt = seedTime,
-                    FavoriteGenres = new List<string>()
-                }
-            );
-
-            modelBuilder.Entity<UserRole>().HasData(
-                new UserRole { UserId = adminUserId, RoleId = adminRoleId, AssignedAt = seedTime },
-                new UserRole { UserId = demoUserId, RoleId = userRoleId, AssignedAt = seedTime }
-            );
-        }
     }
 }

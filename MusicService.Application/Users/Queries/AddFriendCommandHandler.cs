@@ -1,15 +1,18 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using MusicService.Application.Common;
 using MusicService.Application.Common.Interfaces;
 using System;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace MusicService.Application.Users.Commands
 {
-    public class AddFriendCommandHandler : IRequestHandler<AddFriendCommand, bool>
+    public class AddFriendCommandHandler : IRequestHandler<AddFriendCommand, AddFriendResult>
     {
         private readonly IMusicServiceDbContext _dbContext;
         private readonly ILogger<AddFriendCommandHandler> _logger;
@@ -22,55 +25,208 @@ namespace MusicService.Application.Users.Commands
             _logger = logger;
         }
 
-        public async Task<bool> Handle(AddFriendCommand request, CancellationToken cancellationToken)
+        public async Task<AddFriendResult> Handle(AddFriendCommand request, CancellationToken cancellationToken)
         {
             _logger.LogInformation("Adding friend {FriendId} to user {UserId}", 
                 request.FriendId, request.UserId);
             
-            try
+            var maxAttempts = 3;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var user = await _dbContext.Users
-                    .Include(u => u.Friends)
-                    .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
-                var friend = await _dbContext.Users
-                    .FirstOrDefaultAsync(u => u.Id == request.FriendId, cancellationToken);
-                
-                if (user == null)
+                IDbContextTransaction? transaction = null;
+                try
                 {
-                    _logger.LogWarning("User {UserId} not found", request.UserId);
-                    return false;
-                }
-                
-                if (friend == null)
-                {
-                    _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
-                    return false;
-                }
-                
-                if (user.Id == friend.Id)
-                {
-                    _logger.LogWarning("User cannot add themselves as a friend");
-                    return false;
-                }
-                
-                if (user.Friends.Any(f => f.Id == request.FriendId))
-                {
-                    _logger.LogInformation("Users are already friends");
-                    return true; // Уже друзья, считаем операцию успешной
-                }
-                
-                user.Friends.Add(friend);
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                    if (_dbContext is DbContext context)
+                    {
+                        context.ChangeTracker.Clear();
+                    }
 
-                _logger.LogInformation("Friend added successfully");
-                return true;
+                    var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                    var isPostgres = _dbContext.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL";
+                    if (isInMemory)
+                    {
+                        var user = await _dbContext.Users
+                            .Include(u => u.Friends)
+                            .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+                        var friend = await _dbContext.Users
+                            .FirstOrDefaultAsync(u => u.Id == request.FriendId, cancellationToken);
+
+                        if (user == null)
+                        {
+                            _logger.LogWarning("User {UserId} not found", request.UserId);
+                            return AddFriendResult.UserMissing();
+                        }
+
+                        if (friend == null)
+                        {
+                            _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
+                            return AddFriendResult.FriendMissing();
+                        }
+
+                        if (request.UserId == request.FriendId)
+                        {
+                            _logger.LogWarning("User cannot add themselves as a friend");
+                            return AddFriendResult.Failed();
+                        }
+
+                        if (user.Friends.Any(f => f.Id == request.FriendId))
+                        {
+                            _logger.LogInformation("Users are already friends");
+                            return AddFriendResult.AlreadyFriends();
+                        }
+
+                        user.Friends.Add(friend);
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        _logger.LogInformation("Friend added successfully");
+                        return AddFriendResult.Ok();
+                    }
+
+                    transaction = await _dbContext.Database.BeginTransactionAsync(
+                        IsolationLevel.Serializable, cancellationToken);
+
+                    if (!isPostgres)
+                    {
+                        var userExistsNonPostgres = await _dbContext.Users
+                            .AsNoTracking()
+                            .AnyAsync(u => u.Id == request.UserId, cancellationToken);
+                        if (!userExistsNonPostgres)
+                        {
+                            _logger.LogWarning("User {UserId} not found", request.UserId);
+                            await transaction.RollbackAsync(cancellationToken);
+                            return AddFriendResult.UserMissing();
+                        }
+
+                        var friendExistsNonPostgres = await _dbContext.Users
+                            .AsNoTracking()
+                            .AnyAsync(u => u.Id == request.FriendId, cancellationToken);
+                        if (!friendExistsNonPostgres)
+                        {
+                            _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
+                            await transaction.RollbackAsync(cancellationToken);
+                            return AddFriendResult.FriendMissing();
+                        }
+
+                        if (request.UserId == request.FriendId)
+                        {
+                            _logger.LogWarning("User cannot add themselves as a friend");
+                            await transaction.RollbackAsync(cancellationToken);
+                            return AddFriendResult.Failed();
+                        }
+
+                        var user = await _dbContext.Users
+                            .Include(u => u.Friends)
+                            .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
+                        var friend = await _dbContext.Users
+                            .FirstOrDefaultAsync(u => u.Id == request.FriendId, cancellationToken);
+                        if (user == null || friend == null)
+                        {
+                            await transaction.RollbackAsync(cancellationToken);
+                            return AddFriendResult.Failed();
+                        }
+
+                        if (user.Friends.Any(f => f.Id == request.FriendId))
+                        {
+                            _logger.LogInformation("Users are already friends");
+                            await transaction.CommitAsync(cancellationToken);
+                            return AddFriendResult.AlreadyFriends();
+                        }
+
+                        user.Friends.Add(friend);
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+                        _logger.LogInformation("Friend added successfully");
+                        return AddFriendResult.Ok();
+                    }
+
+                    var userExistsPostgres = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == request.UserId, cancellationToken);
+                    if (!userExistsPostgres)
+                    {
+                        _logger.LogWarning("User {UserId} not found", request.UserId);
+                        await transaction.RollbackAsync(cancellationToken);
+                        return AddFriendResult.UserMissing();
+                    }
+
+                    var friendExistsPostgres = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == request.FriendId, cancellationToken);
+                    if (!friendExistsPostgres)
+                    {
+                        _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
+                        await transaction.RollbackAsync(cancellationToken);
+                        return AddFriendResult.FriendMissing();
+                    }
+
+                    if (request.UserId == request.FriendId)
+                    {
+                        _logger.LogWarning("User cannot add themselves as a friend");
+                        await transaction.RollbackAsync(cancellationToken);
+                        return AddFriendResult.Failed();
+                    }
+
+                    var rows = await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                        $"INSERT INTO user_friends (user_id, friend_id) VALUES ({request.UserId}, {request.FriendId}) ON CONFLICT DO NOTHING",
+                        cancellationToken);
+
+                    await transaction.CommitAsync(cancellationToken);
+                    if (rows == 0)
+                    {
+                        _logger.LogInformation("Friendship already exists");
+                        return AddFriendResult.AlreadyFriends();
+                    }
+
+                    _logger.LogInformation("Friend added successfully");
+                    return AddFriendResult.Ok();
+                }
+                catch (Exception ex)
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
+
+                    if (DatabaseErrorDetector.IsTransient(ex) && attempt < maxAttempts)
+                    {
+                        await DelayAsync(attempt, cancellationToken);
+                        continue;
+                    }
+
+                    if (DatabaseErrorDetector.IsUniqueViolation(ex) || await FriendshipExistsAsync(request, cancellationToken))
+                    {
+                        _logger.LogInformation("Friendship already exists");
+                        return AddFriendResult.AlreadyFriends();
+                    }
+
+                    _logger.LogError(ex, "Error adding friend {FriendId} to user {UserId}",
+                        request.FriendId, request.UserId);
+                    return AddFriendResult.Failed();
+                }
+                finally
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.DisposeAsync();
+                    }
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error adding friend {FriendId} to user {UserId}", 
-                    request.FriendId, request.UserId);
-                return false;
-            }
+
+            return AddFriendResult.Failed();
+        }
+
+        private static Task DelayAsync(int attempt, CancellationToken cancellationToken)
+        {
+            var delayMs = 50 * (int)Math.Pow(2, attempt - 1);
+            return Task.Delay(delayMs, cancellationToken);
+        }
+
+        private Task<bool> FriendshipExistsAsync(AddFriendCommand request, CancellationToken cancellationToken)
+        {
+            return _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == request.UserId)
+                .SelectMany(u => u.Friends)
+                .AnyAsync(f => f.Id == request.FriendId, cancellationToken);
         }
     }
 }

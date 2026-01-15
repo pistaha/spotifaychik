@@ -11,6 +11,9 @@ using MusicService.Application.Users.Commands;
 using MusicService.Application.Users.Dtos;
 using MusicService.Application.Users.Queries;
 using Xunit;
+using MusicService.API.Authentication;
+using MusicService.API.Models;
+using Microsoft.Extensions.Options;
 
 namespace Tests.MusicService.API.Tests.Controllers;
 
@@ -21,7 +24,14 @@ public class UsersControllerTests
 
     public UsersControllerTests()
     {
-        _controller = new UsersController(_mediator.Object);
+        var jwtOptions = Options.Create(new JwtSettings
+        {
+            Issuer = "MusicService",
+            Audience = "MusicServiceUsers",
+            SecretKey = "test-secret-key-min-32-chars-long"
+        });
+        var tokenService = new JwtTokenService(jwtOptions);
+        _controller = new UsersController(_mediator.Object, tokenService, jwtOptions);
     }
 
     [Fact]
@@ -48,8 +58,9 @@ public class UsersControllerTests
 
         var created = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
         created.ActionName.Should().Be(nameof(UsersController.GetUser));
-        var response = created.Value.Should().BeOfType<ApiResponse<UserDto>>().Subject;
-        response.Data.Should().Be(dto);
+        var response = created.Value.Should().BeOfType<ApiResponse<RegisterUserResponse>>().Subject;
+        response.Data!.User.Should().Be(dto);
+        response.Data.Token.AccessToken.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

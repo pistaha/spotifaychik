@@ -1,13 +1,19 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MusicService.API.Authentication;
 using MusicService.Infrastructure.Persistence;
+using System;
 using System.Reflection;
+using System.Text;
 
 namespace MusicService.API.Configuration
 {
     public static class ApiDependencyInjection
     {
-        public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment env)
         {
             // Контроллеры с настройкой JSON
             services.AddControllers()
@@ -155,6 +161,51 @@ namespace MusicService.API.Configuration
             services.AddHealthChecks()
                 .AddDbContextCheck<MusicServiceDbContext>("database");
 
+            // Authentication & Authorization (JWT)
+            var jwtSection = configuration.GetSection("JwtSettings");
+            var jwtIssuer = jwtSection["Issuer"];
+            var jwtAudience = jwtSection["Audience"];
+            var jwtSecret = jwtSection["SecretKey"];
+            var jwtConfigured = !string.IsNullOrWhiteSpace(jwtIssuer) &&
+                                !string.IsNullOrWhiteSpace(jwtAudience) &&
+                                !string.IsNullOrWhiteSpace(jwtSecret);
+
+            if (jwtConfigured)
+            {
+                services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                    .AddJwtBearer(options =>
+                    {
+                        options.RequireHttpsMetadata = true;
+                        options.TokenValidationParameters = new TokenValidationParameters
+                        {
+                            ValidateIssuer = true,
+                            ValidateAudience = true,
+                            ValidateLifetime = true,
+                            ValidateIssuerSigningKey = true,
+                            ValidIssuer = jwtIssuer,
+                            ValidAudience = jwtAudience,
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                            ClockSkew = TimeSpan.FromMinutes(2)
+                        };
+                    });
+
+                services.AddAuthorization();
+            }
+            else if ((env.IsDevelopment() || env.IsEnvironment("Test") || env.IsEnvironment("Testing")) &&
+                     configuration.GetValue<bool>("Auth:EnableDevelopmentAuth"))
+            {
+                services.AddAuthentication("Development")
+                    .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthHandler>("Development", _ => { });
+                services.AddAuthorization();
+            }
+            else
+            {
+                throw new InvalidOperationException("Jwt settings are not configured.");
+            }
+
+            services.Configure<JwtSettings>(jwtSection);
+            services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
             // Response Compression
             services.AddResponseCompression(options =>
             {
@@ -196,6 +247,7 @@ namespace MusicService.API.Configuration
             // Health Checks
             app.UseHealthChecks("/health");
             
+            app.UseAuthentication();
             app.UseAuthorization();
             app.UseEndpoints(endpoints =>
             {
