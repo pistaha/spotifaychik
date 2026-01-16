@@ -24,11 +24,12 @@ namespace Tests.EFCoreTests
             var method = typeof(SearchQueryHandler).GetMethod("CalculateRelevance", BindingFlags.Instance | BindingFlags.NonPublic);
             method.Should().NotBeNull();
 
-            var starts = (double)method!.Invoke(handler, new object[] { "rockstar", "rock", (List<string>?)null })!;
-            var contains = (double)method!.Invoke(handler, new object[] { "mega rock song", "rock", (List<string>?)null })!;
-            var genreMatch = (double)method!.Invoke(handler, new object[] { "nomatch", "rock", new List<string> { "Rock" } })!;
-            var wordMatch = (double)method!.Invoke(handler, new object[] { "foo bar", "barista", (List<string>?)null })!;
-            var none = (double)method!.Invoke(handler, new object[] { "nomatch", "xyz", (List<string>?)null })!;
+            List<string>? noGenres = null;
+            var starts = (double)method!.Invoke(handler, new object?[] { "rockstar", "rock", noGenres })!;
+            var contains = (double)method!.Invoke(handler, new object?[] { "mega rock song", "rock", noGenres })!;
+            var genreMatch = (double)method!.Invoke(handler, new object?[] { "nomatch", "rock", new List<string> { "Rock" } })!;
+            var wordMatch = (double)method!.Invoke(handler, new object?[] { "foo bar", "barista", noGenres })!;
+            var none = (double)method!.Invoke(handler, new object?[] { "nomatch", "xyz", noGenres })!;
 
             starts.Should().Be(1.0);
             contains.Should().Be(0.5);
@@ -45,10 +46,11 @@ namespace Tests.EFCoreTests
             var method = typeof(AdvancedSearchQueryHandler).GetMethod("CalculateAdvancedRelevance", BindingFlags.Instance | BindingFlags.NonPublic);
             method.Should().NotBeNull();
 
-            var exact = (double)method!.Invoke(handler, new object[] { "rock", "rock", (List<string>?)null })!;
-            var starts = (double)method!.Invoke(handler, new object[] { "rockstar", "rock", (List<string>?)null })!;
-            var contains = (double)method!.Invoke(handler, new object[] { "mega rock song", "rock", (List<string>?)null })!;
-            var withGenres = (double)method!.Invoke(handler, new object[] { "nomatch", "rock", new List<string> { "Rock", "Pop" } })!;
+            List<string>? noGenres = null;
+            var exact = (double)method!.Invoke(handler, new object?[] { "rock", "rock", noGenres })!;
+            var starts = (double)method!.Invoke(handler, new object?[] { "rockstar", "rock", noGenres })!;
+            var contains = (double)method!.Invoke(handler, new object?[] { "mega rock song", "rock", noGenres })!;
+            var withGenres = (double)method!.Invoke(handler, new object?[] { "nomatch", "rock", new List<string> { "Rock", "Pop" } })!;
 
             exact.Should().BeGreaterThan(1.9);
             starts.Should().BeGreaterThan(1.4);

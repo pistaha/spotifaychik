@@ -1,30 +1,41 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
 using MusicService.Application.Albums.Queries;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Domain.Entities;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Albums.Queries;
 
 public class GetAlbumsByArtistQueryHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IAlbumRepository> _albumRepository = new();
-
     [Fact]
     public async Task Handle_ShouldReturnAlbumsByArtist()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
-        _albumRepository.Setup(r => r.GetAlbumsByArtistAsync(artistId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Album> { new() { Id = Guid.NewGuid(), ArtistId = artistId, Artist = new Artist() } });
-        var handler = new GetAlbumsByArtistQueryHandler(_albumRepository.Object, _mapper);
+        var artist = new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        };
+        dbContext.Artists.Add(artist);
+        dbContext.Albums.Add(new Album
+        {
+            Id = Guid.NewGuid(),
+            ArtistId = artistId,
+            Artist = artist,
+            Title = "Album",
+            ReleaseDate = DateTime.UtcNow,
+            Type = AlbumType.Album,
+            Genres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+        var handler = new GetAlbumsByArtistQueryHandler(dbContext, TestMapperFactory.Create());
 
         var result = await handler.Handle(new GetAlbumsByArtistQuery { ArtistId = artistId }, CancellationToken.None);
 
         result.Should().HaveCount(1);
-        _albumRepository.Verify(r => r.GetAlbumsByArtistAsync(artistId, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

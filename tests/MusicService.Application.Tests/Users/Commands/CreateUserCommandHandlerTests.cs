@@ -1,31 +1,30 @@
-using AutoMapper;
 using FluentAssertions;
 using Moq;
 using MusicService.Application.Common.Interfaces;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Application.Users.Commands;
 using MusicService.Application.Users.Dtos;
 using MusicService.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Users.Commands;
 
 public class CreateUserCommandHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IUserRepository> _userRepository = new();
     private readonly Mock<IPasswordHasher> _passwordHasher = new();
-    private readonly Mock<Microsoft.Extensions.Logging.ILogger<CreateUserCommandHandler>> _logger = new();
 
     [Fact]
     public async Task Handle_ShouldHashPasswordAndReturnDto()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var command = new CreateUserCommand { Username = "user", Email = "email@test.com", Password = "pass" };
         _passwordHasher.Setup(h => h.HashPassword(command.Password)).Returns("hashed");
-        _userRepository.Setup(r => r.CreateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((User u, CancellationToken _) => { u.Id = Guid.NewGuid(); return u; });
-        var handler = new CreateUserCommandHandler(_userRepository.Object, _passwordHasher.Object, _mapper, _logger.Object);
+        var handler = new CreateUserCommandHandler(
+            dbContext,
+            _passwordHasher.Object,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<CreateUserCommandHandler>());
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -37,10 +36,24 @@ public class CreateUserCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldThrow_WhenEmailExists()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var command = new CreateUserCommand { Username = "user", Email = "email@test.com", Password = "pass" };
-        _userRepository.Setup(r => r.FindByEmailAsync(command.Email, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new User());
-        var handler = new CreateUserCommandHandler(_userRepository.Object, _passwordHasher.Object, _mapper, _logger.Object);
+        dbContext.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "existing",
+            Email = command.Email,
+            PasswordHash = "hash",
+            DisplayName = "Existing",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+        var handler = new CreateUserCommandHandler(
+            dbContext,
+            _passwordHasher.Object,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<CreateUserCommandHandler>());
 
         var act = async () => await handler.Handle(command, CancellationToken.None);
 

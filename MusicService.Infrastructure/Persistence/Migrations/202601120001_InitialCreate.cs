@@ -196,3 +196,4 @@ namespace MusicService.Infrastructure.Persistence.Migrations
         }
     }
 }
+  

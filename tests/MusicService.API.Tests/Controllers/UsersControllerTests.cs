@@ -87,7 +87,7 @@ public class UsersControllerTests
         var userId = Guid.NewGuid();
         var friendId = Guid.NewGuid();
         _mediator.Setup(m => m.Send(It.Is<AddFriendCommand>(c => c.UserId == userId && c.FriendId == friendId), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(AddFriendResult.Ok());
 
         var result = await _controller.AddFriend(userId, friendId, CancellationToken.None);
 

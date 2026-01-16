@@ -1,43 +1,65 @@
 using FluentAssertions;
-using Moq;
-using MusicService.Application.Common.Interfaces.Repositories;
+using Microsoft.Extensions.Logging;
 using MusicService.Application.Users.Commands;
-using MusicService.Application.Users.Queries;
 using MusicService.Domain.Entities;
+using Tests.EFCoreTests;
 using Xunit;
 
 namespace Tests.MusicService.Application.Tests.Users.Commands;
 
 public class AddFriendCommandHandlerTests
 {
-    private readonly Mock<IUserRepository> _userRepository = new();
-    private readonly Mock<Microsoft.Extensions.Logging.ILogger<AddFriendCommandHandler>> _logger = new();
-
     [Fact]
-    public async Task Handle_ShouldReturnFalse_WhenUserNotFound()
+    public async Task Handle_ShouldReturnUserMissing_WhenUserNotFound()
     {
-        var handler = new AddFriendCommandHandler(_userRepository.Object, _logger.Object);
-        _userRepository.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((User?)null);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var handler = new AddFriendCommandHandler(
+            dbContext,
+            LoggerFactory.Create(_ => { }).CreateLogger<AddFriendCommandHandler>());
 
         var result = await handler.Handle(new AddFriendCommand { UserId = Guid.NewGuid(), FriendId = Guid.NewGuid() }, CancellationToken.None);
 
-        result.Should().BeFalse();
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(AddFriendStatus.UserNotFound);
     }
 
     [Fact]
-    public async Task Handle_ShouldReturnTrue_WhenAlreadyFriends()
+    public async Task Handle_ShouldReturnAlreadyFriends_WhenFriendshipExists()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var userId = Guid.NewGuid();
         var friendId = Guid.NewGuid();
-        _userRepository.Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = userId });
-        _userRepository.Setup(r => r.GetByIdAsync(friendId, It.IsAny<CancellationToken>())).ReturnsAsync(new User { Id = friendId });
-        _userRepository.Setup(r => r.GetUserFriendsAsync(userId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<User> { new() { Id = friendId } });
-        var handler = new AddFriendCommandHandler(_userRepository.Object, _logger.Object);
+        var user = new User
+        {
+            Id = userId,
+            Username = "user",
+            Email = "user@music.local",
+            PasswordHash = "hash",
+            DisplayName = "User",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        };
+        var friend = new User
+        {
+            Id = friendId,
+            Username = "friend",
+            Email = "friend@music.local",
+            PasswordHash = "hash",
+            DisplayName = "Friend",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        };
+        user.Friends.Add(friend);
+        dbContext.Users.AddRange(user, friend);
+        await dbContext.SaveChangesAsync();
+
+        var handler = new AddFriendCommandHandler(
+            dbContext,
+            LoggerFactory.Create(_ => { }).CreateLogger<AddFriendCommandHandler>());
 
         var result = await handler.Handle(new AddFriendCommand { UserId = userId, FriendId = friendId }, CancellationToken.None);
 
-        result.Should().BeTrue();
+        result.Success.Should().BeFalse();
+        result.Status.Should().Be(AddFriendStatus.AlreadyFriends);
     }
 }

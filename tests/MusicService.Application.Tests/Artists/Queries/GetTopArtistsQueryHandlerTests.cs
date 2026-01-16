@@ -1,29 +1,38 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
 using MusicService.Application.Artists.Queries;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Domain.Entities;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Artists.Queries;
 
 public class GetTopArtistsQueryHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IArtistRepository> _artistRepository = new();
-
     [Fact]
     public async Task Handle_ShouldReturnMappedArtists()
     {
-        var artists = new List<Artist> { new() { Id = Guid.NewGuid(), Name = "Top" } };
-        _artistRepository.Setup(r => r.GetTopArtistsAsync(3, It.IsAny<CancellationToken>())).ReturnsAsync(artists);
-        var handler = new GetTopArtistsQueryHandler(_artistRepository.Object, _mapper);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        dbContext.Artists.Add(new Artist
+        {
+            Id = Guid.NewGuid(),
+            Name = "Top",
+            Country = "US",
+            MonthlyListeners = 100,
+            Genres = new List<string>()
+        });
+        dbContext.Artists.Add(new Artist
+        {
+            Id = Guid.NewGuid(),
+            Name = "Low",
+            Country = "US",
+            MonthlyListeners = 10,
+            Genres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+        var handler = new GetTopArtistsQueryHandler(dbContext);
 
         var result = await handler.Handle(new GetTopArtistsQuery { Count = 3 }, CancellationToken.None);
 
-        result.Should().HaveCount(1);
-        result.Single().Name.Should().Be("Top");
+        result.Should().ContainSingle(a => a.Name == "Top");
     }
 }

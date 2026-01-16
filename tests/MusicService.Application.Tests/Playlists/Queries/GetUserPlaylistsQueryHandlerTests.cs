@@ -1,32 +1,38 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Application.Playlists.Queries;
 using MusicService.Domain.Entities;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Playlists.Queries;
 
 public class GetUserPlaylistsQueryHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IPlaylistRepository> _playlistRepository = new();
-
     [Fact]
     public async Task Handle_ShouldFilterPrivatePlaylists_WhenIncludePrivateIsFalse()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var userId = Guid.NewGuid();
+        dbContext.Users.Add(new User
+        {
+            Id = userId,
+            Username = "user",
+            Email = "user@music.local",
+            PasswordHash = "hash",
+            DisplayName = "User",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
         var playlists = new List<Playlist>
         {
-            new() { Id = Guid.NewGuid(), IsPublic = true, PlaylistTracks = new List<PlaylistTrack>() },
-            new() { Id = Guid.NewGuid(), IsPublic = false, PlaylistTracks = new List<PlaylistTrack>() }
+            new() { Id = Guid.NewGuid(), CreatedById = userId, IsPublic = true, PlaylistTracks = new List<PlaylistTrack>(), Title = "Public", Type = PlaylistType.UserCreated },
+            new() { Id = Guid.NewGuid(), CreatedById = userId, IsPublic = false, PlaylistTracks = new List<PlaylistTrack>(), Title = "Private", Type = PlaylistType.UserCreated }
         };
-        _playlistRepository.Setup(r => r.GetUserPlaylistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(playlists);
-        var handler = new GetUserPlaylistsQueryHandler(_playlistRepository.Object, _mapper);
+        dbContext.Playlists.AddRange(playlists);
+        await dbContext.SaveChangesAsync();
+        var handler = new GetUserPlaylistsQueryHandler(dbContext);
 
-        var result = await handler.Handle(new GetUserPlaylistsQuery { UserId = Guid.NewGuid(), IncludePrivate = false }, CancellationToken.None);
+        var result = await handler.Handle(new GetUserPlaylistsQuery { UserId = userId, IncludePrivate = false }, CancellationToken.None);
 
         result.Should().HaveCount(1);
         result.All(p => p.IsPublic).Should().BeTrue();
@@ -35,11 +41,31 @@ public class GetUserPlaylistsQueryHandlerTests
     [Fact]
     public async Task Handle_ShouldReturnAllPlaylists_WhenIncludePrivateIsTrue()
     {
-        _playlistRepository.Setup(r => r.GetUserPlaylistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Playlist> { new() { IsPublic = false, PlaylistTracks = new List<PlaylistTrack>() } });
-        var handler = new GetUserPlaylistsQueryHandler(_playlistRepository.Object, _mapper);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var userId = Guid.NewGuid();
+        dbContext.Users.Add(new User
+        {
+            Id = userId,
+            Username = "user",
+            Email = "user@music.local",
+            PasswordHash = "hash",
+            DisplayName = "User",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        dbContext.Playlists.Add(new Playlist
+        {
+            Id = Guid.NewGuid(),
+            CreatedById = userId,
+            IsPublic = false,
+            PlaylistTracks = new List<PlaylistTrack>(),
+            Title = "Private",
+            Type = PlaylistType.UserCreated
+        });
+        await dbContext.SaveChangesAsync();
+        var handler = new GetUserPlaylistsQueryHandler(dbContext);
 
-        var result = await handler.Handle(new GetUserPlaylistsQuery { UserId = Guid.NewGuid(), IncludePrivate = true }, CancellationToken.None);
+        var result = await handler.Handle(new GetUserPlaylistsQuery { UserId = userId, IncludePrivate = true }, CancellationToken.None);
 
         result.Should().HaveCount(1);
         result.Single().IsPublic.Should().BeFalse();

@@ -85,7 +85,7 @@ namespace Tests.EFCoreTests
             var dbContext = CreateInMemoryDbContext();
             var handler = new BulkCreateUsersCommandHandler(
                 dbContext,
-                new MusicService.Infrastructure.Security.BcryptPasswordHasher(),
+                new global::MusicService.Infrastructure.Security.BcryptPasswordHasher(),
                 TestMapperFactory.Create(),
                 NullLogger<BulkCreateUsersCommandHandler>.Instance);
 
@@ -184,7 +184,7 @@ namespace Tests.EFCoreTests
 
             var handler = new BulkCreateUsersCommandHandler(
                 dbContext,
-                new MusicService.Infrastructure.Security.BcryptPasswordHasher(),
+                new global::MusicService.Infrastructure.Security.BcryptPasswordHasher(),
                 TestMapperFactory.Create(),
                 NullLogger<BulkCreateUsersCommandHandler>.Instance);
 

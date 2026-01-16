@@ -1,27 +1,20 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Application.Playlists.Dtos;
 using MusicService.Application.Playlists.Queries;
 using MusicService.Domain.Entities;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Playlists.Queries;
 
 public class GetPlaylistByIdQueryHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IPlaylistRepository> _playlistRepository = new();
-
     [Fact]
     public async Task Handle_ShouldReturnNull_WhenPlaylistNotFound()
     {
-        var handler = new GetPlaylistByIdQueryHandler(_playlistRepository.Object, _mapper);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var handler = new GetPlaylistByIdQueryHandler(dbContext, TestMapperFactory.Create());
         var query = new GetPlaylistByIdQuery { PlaylistId = Guid.NewGuid() };
-        _playlistRepository.Setup(r => r.GetByIdAsync(query.PlaylistId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Playlist?)null);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -31,17 +24,41 @@ public class GetPlaylistByIdQueryHandlerTests
     [Fact]
     public async Task Handle_ShouldSetIsFollowingFlag_WhenUserIsFollower()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var followerId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        var follower = new User
+        {
+            Id = followerId,
+            Username = "follower",
+            Email = "follower@music.local",
+            PasswordHash = "hash",
+            DisplayName = "Follower",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        };
+        var creator = new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@music.local",
+            PasswordHash = "hash",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        };
         var playlist = new Playlist
         {
             Id = Guid.NewGuid(),
             Title = "Chill",
-            Followers = new List<User> { new() { Id = followerId } },
+            CreatedById = creatorId,
+            Followers = new List<User> { follower },
             PlaylistTracks = new List<PlaylistTrack>()
         };
-        var handler = new GetPlaylistByIdQueryHandler(_playlistRepository.Object, _mapper);
-        _playlistRepository.Setup(r => r.GetByIdAsync(playlist.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(playlist);
+        dbContext.Users.AddRange(follower, creator);
+        dbContext.Playlists.Add(playlist);
+        await dbContext.SaveChangesAsync();
+        var handler = new GetPlaylistByIdQueryHandler(dbContext, TestMapperFactory.Create());
 
         var result = await handler.Handle(new GetPlaylistByIdQuery { PlaylistId = playlist.Id, UserId = followerId }, CancellationToken.None);
 
