@@ -35,7 +35,14 @@ public class PlaylistsControllerTests
     public async Task GetPlaylist_ShouldReturnNotFound_WhenPlaylistMissing()
     {
         var playlistId = Guid.NewGuid();
-        _mediator.Setup(m => m.Send(It.Is<GetPlaylistByIdQuery>(q => q.PlaylistId == playlistId), It.IsAny<CancellationToken>()))
+        var userId = Guid.NewGuid();
+        SetUser(userId);
+        _mediator.Setup(m => m.Send(It.Is<GetPlaylistByIdQuery>(q =>
+                q.PlaylistId == playlistId &&
+                q.UserId == userId &&
+                q.IncludePrivate &&
+                !q.AllowPrivateAccess),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync((PlaylistDto?)null);
 
         var result = await _controller.GetPlaylist(playlistId, null, CancellationToken.None);

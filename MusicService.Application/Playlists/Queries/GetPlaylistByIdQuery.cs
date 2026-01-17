@@ -8,5 +8,7 @@ namespace MusicService.Application.Playlists.Queries
     {
         public Guid PlaylistId { get; init; }
         public Guid? UserId { get; init; }
+        public bool IncludePrivate { get; init; }
+        public bool AllowPrivateAccess { get; init; }
     }
 }

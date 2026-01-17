@@ -23,7 +23,7 @@ namespace MusicService.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "User,Admin,Moderator")]
+    [Authorize(Roles = "User,Admin")]
     public class UsersController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -109,6 +109,7 @@ namespace MusicService.API.Controllers
 
         [HttpPut("{id:guid}")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanManageUsers")]
         [ProducesResponseType(typeof(ApiResponse<UserDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<UserDto>), 404)]
         public async Task<ActionResult<ApiResponse<UserDto>>> UpdateUser(
@@ -178,6 +179,7 @@ namespace MusicService.API.Controllers
 
         [HttpDelete("{id:guid}")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanDeleteUser")]
         [ProducesResponseType(typeof(ApiResponse<bool>), 200)]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(
             Guid id,
@@ -215,6 +217,7 @@ namespace MusicService.API.Controllers
 
         [HttpPost("{id:guid}/block")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanManageUsers")]
         public async Task<ActionResult<ApiResponse<bool>>> BlockUser(
             Guid id,
             CancellationToken cancellationToken = default)
@@ -242,6 +245,7 @@ namespace MusicService.API.Controllers
 
         [HttpPost("{id:guid}/unblock")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanManageUsers")]
         public async Task<ActionResult<ApiResponse<bool>>> UnblockUser(
             Guid id,
             CancellationToken cancellationToken = default)
@@ -269,6 +273,7 @@ namespace MusicService.API.Controllers
 
         [HttpPost("{id:guid}/roles")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanManageUsers")]
         public async Task<ActionResult<ApiResponse<bool>>> AssignRole(
             Guid id,
             [FromBody] RoleChangeRequest request,
@@ -314,6 +319,7 @@ namespace MusicService.API.Controllers
 
         [HttpDelete("{id:guid}/roles/{roleName}")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanManageUsers")]
         public async Task<ActionResult<ApiResponse<bool>>> RevokeRole(
             Guid id,
             string roleName,
@@ -406,6 +412,7 @@ namespace MusicService.API.Controllers
 
         [HttpGet("{id:guid}/statistics")]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanViewReports")]
         [ProducesResponseType(typeof(ApiResponse<UserStatisticsDto>), 200)]
         public async Task<ActionResult<ApiResponse<UserStatisticsDto>>> GetUserStatistics(
             Guid id,
@@ -419,6 +426,7 @@ namespace MusicService.API.Controllers
 
         [HttpGet]
         [Authorize(Roles = "Admin")]
+        [Authorize(Policy = "CanManageUsers")]
         [ProducesResponseType(typeof(ApiResponse<PagedResult<UserDto>>), 200)]
         public async Task<ActionResult<ApiResponse<PagedResult<UserDto>>>> GetUsers(
             [FromQuery] int page = 1,

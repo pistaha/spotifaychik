@@ -32,6 +32,7 @@ namespace MusicService.API.Controllers
         }
 
         [HttpGet("{id:guid}")]
+        [Authorize]
         [ProducesResponseType(typeof(ApiResponse<PlaylistDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<PlaylistDto>), 404)]
         public async Task<ActionResult<ApiResponse<PlaylistDto>>> GetPlaylist(
@@ -39,10 +40,24 @@ namespace MusicService.API.Controllers
             [FromQuery] Guid? userId = null,
             CancellationToken cancellationToken = default)
         {
+            var isPrivileged = User.IsInRole("Admin") || User.IsInRole("Moderator");
+            if (!isPrivileged)
+            {
+                var currentUserId = GetUserId();
+                if (!currentUserId.HasValue)
+                {
+                    return Unauthorized(ApiResponse<PlaylistDto>.ErrorResult("Invalid user"));
+                }
+
+                userId = currentUserId;
+            }
+
             var query = new GetPlaylistByIdQuery 
             { 
                 PlaylistId = id,
-                UserId = userId
+                UserId = userId,
+                IncludePrivate = true,
+                AllowPrivateAccess = isPrivileged
             };
             var result = await _mediator.Send(query, cancellationToken);
             
@@ -83,6 +98,7 @@ namespace MusicService.API.Controllers
 
         [HttpPut("{id:guid}")]
         [Authorize]
+        [Authorize(Policy = "CanEditPost")]
         [ProducesResponseType(typeof(ApiResponse<PlaylistDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<PlaylistDto>), 404)]
         public async Task<ActionResult<ApiResponse<PlaylistDto>>> UpdatePlaylist(
@@ -90,7 +106,12 @@ namespace MusicService.API.Controllers
             [FromBody] UpdatePlaylistCommand command,
             CancellationToken cancellationToken = default)
         {
-            var existing = await _mediator.Send(new GetPlaylistByIdQuery { PlaylistId = id }, cancellationToken);
+            var existing = await _mediator.Send(new GetPlaylistByIdQuery
+            {
+                PlaylistId = id,
+                IncludePrivate = true,
+                AllowPrivateAccess = true
+            }, cancellationToken);
             if (existing == null)
             {
                 return NotFound(ApiResponse<PlaylistDto>.ErrorResult("Playlist not found"));
@@ -129,7 +150,12 @@ namespace MusicService.API.Controllers
             Guid id,
             CancellationToken cancellationToken = default)
         {
-            var existing = await _mediator.Send(new GetPlaylistByIdQuery { PlaylistId = id }, cancellationToken);
+            var existing = await _mediator.Send(new GetPlaylistByIdQuery
+            {
+                PlaylistId = id,
+                IncludePrivate = true,
+                AllowPrivateAccess = true
+            }, cancellationToken);
             if (existing == null)
             {
                 return NotFound(ApiResponse<bool>.ErrorResult("Playlist not found"));

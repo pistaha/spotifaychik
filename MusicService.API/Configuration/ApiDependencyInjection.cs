@@ -199,9 +199,12 @@ namespace MusicService.API.Configuration
                 options.AddPolicy("RequireEmailConfirmed", policy => policy.RequireClaim("EmailConfirmed", "true"));
                 options.AddPolicy("RequirePremiumSubscription", policy => policy.RequireClaim("SubscriptionLevel", "Premium", "Enterprise"));
                 options.AddPolicy("RequireMinimumAge", policy => policy.Requirements.Add(new MinimumAgeRequirement(18)));
+                options.AddPolicy("CanEditPost", policy => policy.Requirements.Add(new PermissionRequirement("CanEditPost")));
                 options.AddPolicy("CanDeleteTracks", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteTracks")));
                 options.AddPolicy("CanEditMetadata", policy => policy.Requirements.Add(new PermissionRequirement("CanEditMetadata")));
                 options.AddPolicy("CanViewAuditLogs", policy => policy.Requirements.Add(new PermissionRequirement("CanViewAuditLogs")));
+                options.AddPolicy("CanViewReports", policy => policy.Requirements.Add(new PermissionRequirement("CanViewReports")));
+                options.AddPolicy("CanDeleteUser", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteUser")));
                 options.AddPolicy("CanManageUsers", policy => policy.RequireRole("Admin"));
             });
             }
@@ -217,9 +220,12 @@ namespace MusicService.API.Configuration
                     options.AddPolicy("RequireEmailConfirmed", policy => policy.RequireClaim("EmailConfirmed", "true"));
                     options.AddPolicy("RequirePremiumSubscription", policy => policy.RequireClaim("SubscriptionLevel", "Premium", "Enterprise"));
                     options.AddPolicy("RequireMinimumAge", policy => policy.Requirements.Add(new MinimumAgeRequirement(18)));
+                    options.AddPolicy("CanEditPost", policy => policy.Requirements.Add(new PermissionRequirement("CanEditPost")));
                     options.AddPolicy("CanDeleteTracks", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteTracks")));
                     options.AddPolicy("CanEditMetadata", policy => policy.Requirements.Add(new PermissionRequirement("CanEditMetadata")));
                     options.AddPolicy("CanViewAuditLogs", policy => policy.Requirements.Add(new PermissionRequirement("CanViewAuditLogs")));
+                    options.AddPolicy("CanViewReports", policy => policy.Requirements.Add(new PermissionRequirement("CanViewReports")));
+                    options.AddPolicy("CanDeleteUser", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteUser")));
                     options.AddPolicy("CanManageUsers", policy => policy.RequireRole("Admin"));
                 });
             }

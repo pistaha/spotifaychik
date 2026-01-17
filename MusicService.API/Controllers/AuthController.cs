@@ -39,6 +39,7 @@ namespace MusicService.API.Controllers
         private readonly IJwtTokenService _jwtTokenService;
         private readonly JwtSettings _jwtSettings;
         private readonly ISecurityAuditService _auditService;
+        private readonly ILogger<AuthController> _logger;
         private readonly IValidator<RegisterDto> _registerValidator;
         private readonly IValidator<LoginDto> _loginValidator;
         private readonly IValidator<RefreshTokenDto> _refreshValidator;
@@ -53,6 +54,7 @@ namespace MusicService.API.Controllers
             IJwtTokenService jwtTokenService,
             IOptions<JwtSettings> jwtOptions,
             ISecurityAuditService auditService,
+            ILogger<AuthController> logger,
             IValidator<RegisterDto> registerValidator,
             IValidator<LoginDto> loginValidator,
             IValidator<RefreshTokenDto> refreshValidator,
@@ -66,6 +68,7 @@ namespace MusicService.API.Controllers
             _jwtTokenService = jwtTokenService;
             _jwtSettings = jwtOptions.Value;
             _auditService = auditService;
+            _logger = logger;
             _registerValidator = registerValidator;
             _loginValidator = loginValidator;
             _refreshValidator = refreshValidator;
@@ -170,6 +173,9 @@ namespace MusicService.API.Controllers
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             Response.Headers["X-Email-Confirmation-Token"] = confirmationToken;
+            _logger.LogInformation("Email confirmation token for {Username}: {Token}", user.Username, confirmationToken);
+            _logger.LogInformation("=== EMAIL CONFIRMATION TOKEN === User: {Username} | Token: {Token} ===",
+                user.Username, confirmationToken);
             await EnqueueAuditAsync(SecurityEventType.Register, user.Id, user.Email, true, null, cancellationToken);
             if (userRole != null)
             {
@@ -348,6 +354,13 @@ namespace MusicService.API.Controllers
                 await EnqueueAuditAsync(SecurityEventType.TokenRefresh, userId, null, false,
                     new { Reason = "UserNotFound" }, cancellationToken);
                 return Unauthorized(ApiResponse<AuthResponse>.ErrorResult("Invalid token"));
+            }
+
+            if (!user.IsActive || user.IsDeleted)
+            {
+                await EnqueueAuditAsync(SecurityEventType.TokenRefresh, user.Id, user.Email, false,
+                    new { Reason = "InactiveOrDeleted" }, cancellationToken);
+                return Unauthorized(ApiResponse<AuthResponse>.ErrorResult("User is inactive"));
             }
 
             var sessions = await _dbContext.UserSessions

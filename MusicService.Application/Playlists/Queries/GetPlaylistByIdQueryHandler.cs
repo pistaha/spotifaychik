@@ -35,6 +35,15 @@ namespace MusicService.Application.Playlists.Queries
             if (playlist == null)
                 return null;
 
+            if (!playlist.IsPublic)
+            {
+                var isOwner = request.UserId.HasValue && playlist.CreatedById == request.UserId.Value;
+                if (!request.AllowPrivateAccess && !(request.IncludePrivate && isOwner))
+                {
+                    return null;
+                }
+            }
+
             var dto = _mapper.Map<PlaylistDto>(playlist);
             
             // Проверяем, подписан ли пользователь на плейлист

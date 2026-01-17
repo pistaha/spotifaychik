@@ -17,6 +17,7 @@ namespace MusicService.API.Controllers
     [ApiController]
     [Route("api/admin/audit")]
     [Authorize(Roles = "Admin")]
+    [Authorize(Policy = "RequireAdminRole")]
     [Authorize(Policy = "CanViewAuditLogs")]
     public class AdminAuditController : ControllerBase
     {

@@ -52,6 +52,7 @@ public class GetPlaylistByIdQueryHandlerTests
             Id = Guid.NewGuid(),
             Title = "Chill",
             CreatedById = creatorId,
+            IsPublic = true,
             Followers = new List<User> { follower },
             PlaylistTracks = new List<PlaylistTrack>()
         };
