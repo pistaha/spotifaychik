@@ -41,6 +41,7 @@ namespace Tests.EFCoreTests
                 Type = "Album",
                 ReleaseDate = DateTime.UtcNow.AddDays(-1),
                 ArtistId = Guid.NewGuid(),
+                CreatedById = Guid.NewGuid(),
                 Genres = new List<string> { "Rock" }
             });
 
@@ -54,7 +55,8 @@ namespace Tests.EFCoreTests
             var result = validator.Validate(new CreateArtistCommand
             {
                 Name = "Artist",
-                Country = "US"
+                Country = "US",
+                CreatedById = Guid.NewGuid()
             });
 
             result.IsValid.Should().BeTrue();
@@ -70,7 +72,8 @@ namespace Tests.EFCoreTests
                 DurationSeconds = 120,
                 TrackNumber = 1,
                 AlbumId = Guid.NewGuid(),
-                ArtistId = Guid.NewGuid()
+                ArtistId = Guid.NewGuid(),
+                CreatedById = Guid.NewGuid()
             });
 
             result.IsValid.Should().BeTrue();

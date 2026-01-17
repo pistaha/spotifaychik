@@ -20,12 +20,25 @@ namespace Tests.EFCoreTests
         public async Task CreateAlbum_ShouldThrow_WhenArtistMissing()
         {
             var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+            var creatorId = Guid.NewGuid();
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
+            await dbContext.SaveChangesAsync();
             var handler = new CreateAlbumCommandHandler(dbContext, TestMapperFactory.Create(), NullLogger<CreateAlbumCommandHandler>.Instance);
 
             Func<Task> act = () => handler.Handle(new CreateAlbumCommand
             {
                 Title = "Album",
                 ArtistId = Guid.NewGuid(),
+                CreatedById = creatorId,
                 ReleaseDate = DateTime.UtcNow,
                 Type = "Album",
                 Genres = new()
@@ -39,7 +52,18 @@ namespace Tests.EFCoreTests
         {
             var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
             var artist = new Artist { Id = Guid.NewGuid(), Name = "Artist", Country = "US" };
+            var creatorId = Guid.NewGuid();
             dbContext.Artists.Add(artist);
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
             dbContext.Albums.Add(new Album
             {
                 Id = Guid.NewGuid(),
@@ -55,6 +79,7 @@ namespace Tests.EFCoreTests
             {
                 Title = "Dup Album",
                 ArtistId = artist.Id,
+                CreatedById = creatorId,
                 ReleaseDate = DateTime.UtcNow,
                 Type = "Album",
                 Genres = new()
@@ -68,7 +93,18 @@ namespace Tests.EFCoreTests
         {
             var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
             var artist = new Artist { Id = Guid.NewGuid(), Name = "Artist", Country = "US" };
+            var creatorId = Guid.NewGuid();
             dbContext.Artists.Add(artist);
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
             await dbContext.SaveChangesAsync();
 
             var handler = new CreateTrackCommandHandler(dbContext, TestMapperFactory.Create(), NullLogger<CreateTrackCommandHandler>.Instance);
@@ -79,6 +115,7 @@ namespace Tests.EFCoreTests
                 TrackNumber = 1,
                 AlbumId = Guid.NewGuid(),
                 ArtistId = artist.Id,
+                CreatedById = creatorId,
                 IsExplicit = false
             }, CancellationToken.None);
 
@@ -98,8 +135,19 @@ namespace Tests.EFCoreTests
                 ReleaseDate = DateTime.UtcNow,
                 Type = AlbumType.Album
             };
+            var creatorId = Guid.NewGuid();
             dbContext.Artists.Add(artist);
             dbContext.Albums.Add(album);
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
             dbContext.Tracks.Add(new Track
             {
                 Id = Guid.NewGuid(),
@@ -119,6 +167,7 @@ namespace Tests.EFCoreTests
                 TrackNumber = 1,
                 AlbumId = album.Id,
                 ArtistId = artist.Id,
+                CreatedById = creatorId,
                 IsExplicit = false
             }, CancellationToken.None);
 
@@ -183,6 +232,17 @@ namespace Tests.EFCoreTests
         public async Task CreateArtist_ShouldThrow_WhenDuplicateName()
         {
             var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+            var creatorId = Guid.NewGuid();
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
             dbContext.Artists.Add(new Artist { Id = Guid.NewGuid(), Name = "Dup", Country = "US" });
             await dbContext.SaveChangesAsync();
 
@@ -191,7 +251,8 @@ namespace Tests.EFCoreTests
             {
                 Name = "Dup",
                 Genres = new(),
-                Country = "US"
+                Country = "US",
+                CreatedById = creatorId
             }, CancellationToken.None);
 
             await act.Should().ThrowAsync<ArgumentException>();

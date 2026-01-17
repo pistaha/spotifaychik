@@ -10,9 +10,12 @@ namespace MusicService.Application.Users.Commands
         public string Username { get; init; } = string.Empty;
         public string Email { get; init; } = string.Empty;
         public string Password { get; init; } = string.Empty;
+        public string FirstName { get; init; } = string.Empty;
+        public string LastName { get; init; } = string.Empty;
         public string DisplayName { get; init; } = string.Empty;
         public DateTime? DateOfBirth { get; init; }
         public string Country { get; init; } = "Unknown";
+        public string? PhoneNumber { get; init; }
         public List<string> FavoriteGenres { get; init; } = new();
     }
 }

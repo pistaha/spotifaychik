@@ -35,6 +35,17 @@ namespace Tests.EFCoreTests
                 Genres = new List<string> { "Rock" }
             };
             dbContext.Artists.Add(artist);
+            var creatorId = Guid.NewGuid();
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
             await dbContext.SaveChangesAsync();
 
             var handler = new BulkCreateAlbumsCommandHandler(
@@ -50,6 +61,7 @@ namespace Tests.EFCoreTests
                     {
                         Title = "Bad Type",
                         ArtistId = artist.Id,
+                        CreatedById = creatorId,
                         ReleaseDate = DateTime.UtcNow,
                         Type = "NotAType",
                         Genres = new List<string> { "Rock" }
@@ -58,6 +70,7 @@ namespace Tests.EFCoreTests
                     {
                         Title = "Missing Artist",
                         ArtistId = Guid.NewGuid(),
+                        CreatedById = creatorId,
                         ReleaseDate = DateTime.UtcNow,
                         Type = "Album",
                         Genres = new List<string> { "Rock" }
@@ -66,6 +79,7 @@ namespace Tests.EFCoreTests
                     {
                         Title = "Ok Album",
                         ArtistId = artist.Id,
+                        CreatedById = creatorId,
                         ReleaseDate = DateTime.UtcNow,
                         Type = "Album",
                         Genres = new List<string> { "Rock" }
@@ -134,6 +148,17 @@ namespace Tests.EFCoreTests
                 Country = "US"
             };
             dbContext.Artists.Add(artist);
+            var creatorId = Guid.NewGuid();
+            dbContext.Users.Add(new User
+            {
+                Id = creatorId,
+                Username = "creator",
+                Email = "creator@music.local",
+                PasswordHash = "hash",
+                PasswordSalt = "salt",
+                DisplayName = "Creator",
+                Country = "US"
+            });
             dbContext.Albums.Add(new Album
             {
                 Id = Guid.NewGuid(),
@@ -157,6 +182,7 @@ namespace Tests.EFCoreTests
                     {
                         Title = "Dup Album",
                         ArtistId = artist.Id,
+                        CreatedById = creatorId,
                         ReleaseDate = DateTime.UtcNow,
                         Type = "Album",
                         Genres = new List<string>()

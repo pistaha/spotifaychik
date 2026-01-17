@@ -13,5 +13,6 @@ namespace MusicService.Application.Tracks.Commands
         public bool IsExplicit { get; init; }
         public Guid AlbumId { get; init; }
         public Guid ArtistId { get; init; }
+        public Guid CreatedById { get; init; }
     }
 }

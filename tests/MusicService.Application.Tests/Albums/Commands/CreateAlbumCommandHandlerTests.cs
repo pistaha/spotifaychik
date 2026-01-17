@@ -14,6 +14,7 @@ public class CreateAlbumCommandHandlerTests
     {
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
         dbContext.Artists.Add(new Artist
         {
             Id = artistId,
@@ -21,11 +22,23 @@ public class CreateAlbumCommandHandlerTests
             Country = "US",
             Genres = new List<string>()
         });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
         await dbContext.SaveChangesAsync();
 
         var command = new CreateAlbumCommand
         {
             ArtistId = artistId,
+            CreatedById = creatorId,
             Title = "Album",
             Type = "Album",
             ReleaseDate = DateTime.UtcNow,
@@ -46,6 +59,7 @@ public class CreateAlbumCommandHandlerTests
         var command = new CreateAlbumCommand
         {
             ArtistId = Guid.NewGuid(),
+            CreatedById = Guid.NewGuid(),
             Title = "Album",
             Type = "Album",
             ReleaseDate = DateTime.UtcNow

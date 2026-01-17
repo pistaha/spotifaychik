@@ -87,7 +87,7 @@ namespace Tests.EFCoreTests
                 {
                     ["JwtSettings:Issuer"] = "MusicService",
                     ["JwtSettings:Audience"] = "MusicServiceUsers",
-                    ["JwtSettings:SecretKey"] = "test-secret-key-min-32-chars-long"
+                    ["JwtSettings:Secret"] = "test-secret-key-min-32-chars-long"
                 })
                 .Build();
 
@@ -158,10 +158,10 @@ namespace Tests.EFCoreTests
         public void PasswordHasher_ShouldHashAndValidateInput()
         {
             var hasher = new BcryptPasswordHasher();
-            var hash = hasher.HashPassword("password");
+            var hash = hasher.HashPassword("password", out _);
 
             hash.Should().NotBeNullOrWhiteSpace();
-            Action act = () => hasher.HashPassword(" ");
+            Action act = () => hasher.HashPassword(" ", out _);
             act.Should().Throw<ArgumentException>();
         }
 

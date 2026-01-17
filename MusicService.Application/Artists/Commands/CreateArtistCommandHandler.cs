@@ -47,6 +47,12 @@ namespace MusicService.Application.Artists.Commands
                             IsolationLevel.Serializable, cancellationToken);
                     }
 
+                    var creatorExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == request.CreatedById, cancellationToken);
+                    if (!creatorExists)
+                        throw new ArgumentException($"User with ID {request.CreatedById} not found");
+
                     var artist = new Artist
                     {
                         Name = request.Name,
@@ -58,7 +64,8 @@ namespace MusicService.Application.Artists.Commands
                         Country = request.Country,
                         CareerStartDate = request.CareerStartDate,
                         IsVerified = false,
-                        MonthlyListeners = 0
+                        MonthlyListeners = 0,
+                        CreatedById = request.CreatedById
                     };
 
                     _dbContext.Artists.Add(artist);

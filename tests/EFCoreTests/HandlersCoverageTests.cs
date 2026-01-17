@@ -55,7 +55,8 @@ namespace Tests.EFCoreTests
             {
                 Name = "Artist B",
                 Genres = new List<string> { "Jazz" },
-                Country = "US"
+                Country = "US",
+                CreatedById = createdUser.Id
             }, CancellationToken.None);
             createdArtist.Name.Should().Be("Artist B");
 
@@ -67,6 +68,7 @@ namespace Tests.EFCoreTests
             {
                 Title = "Album B",
                 ArtistId = createdArtist.Id,
+                CreatedById = createdUser.Id,
                 ReleaseDate = DateTime.UtcNow.AddDays(-2),
                 Type = "Album",
                 Genres = new List<string> { "Jazz" }
@@ -84,6 +86,7 @@ namespace Tests.EFCoreTests
                 TrackNumber = 1,
                 AlbumId = createdAlbum.Id,
                 ArtistId = createdArtist.Id,
+                CreatedById = createdUser.Id,
                 IsExplicit = false
             }, CancellationToken.None);
             createdTrack.Title.Should().Be("Track B");
@@ -151,6 +154,7 @@ namespace Tests.EFCoreTests
                     {
                         Title = "Bulk Album",
                         ArtistId = seed.ArtistId,
+                        CreatedById = seed.UserId,
                         ReleaseDate = DateTime.UtcNow.AddDays(-1),
                         Type = "Album",
                         Genres = new List<string> { "Rock" }
@@ -159,6 +163,7 @@ namespace Tests.EFCoreTests
                     {
                         Title = "Invalid Album",
                         ArtistId = Guid.NewGuid(),
+                        CreatedById = seed.UserId,
                         ReleaseDate = DateTime.UtcNow.AddDays(-1),
                         Type = "Album",
                         Genres = new List<string> { "Rock" }

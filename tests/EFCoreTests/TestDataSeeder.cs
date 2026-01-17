@@ -36,7 +36,7 @@ namespace Tests.EFCoreTests
                 DisplayName = "User One",
                 Country = "US",
                 FavoriteGenres = new List<string> { "Rock", "Pop" },
-                LastLogin = now.AddDays(-2)
+                LastLoginAt = now.AddDays(-2)
             };
 
             var friend = new User
@@ -48,7 +48,7 @@ namespace Tests.EFCoreTests
                 DisplayName = "User Two",
                 Country = "US",
                 FavoriteGenres = new List<string> { "Jazz" },
-                LastLogin = now.AddDays(-1)
+                LastLoginAt = now.AddDays(-1)
             };
 
             var artist = new Artist

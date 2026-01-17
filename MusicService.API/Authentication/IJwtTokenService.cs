@@ -4,6 +4,7 @@ namespace MusicService.API.Authentication
 {
     public interface IJwtTokenService
     {
-        string CreateToken(IEnumerable<Claim> claims);
+        string CreateAccessToken(IEnumerable<Claim> claims, DateTime? expiresAt = null);
+        ClaimsPrincipal GetPrincipalFromExpiredToken(string token);
     }
 }

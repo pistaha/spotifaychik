@@ -19,7 +19,8 @@ public class CreateUserCommandHandlerTests
     {
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var command = new CreateUserCommand { Username = "user", Email = "email@test.com", Password = "pass" };
-        _passwordHasher.Setup(h => h.HashPassword(command.Password)).Returns("hashed");
+        var salt = "salt";
+        _passwordHasher.Setup(h => h.HashPassword(command.Password, out salt)).Returns("hashed");
         var handler = new CreateUserCommandHandler(
             dbContext,
             _passwordHasher.Object,
@@ -29,7 +30,7 @@ public class CreateUserCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Should().BeOfType<UserDto>();
-        _passwordHasher.Verify(h => h.HashPassword("pass"), Times.Once);
+        _passwordHasher.Verify(h => h.HashPassword("pass", out salt), Times.Once);
         result.Email.Should().Be(command.Email);
     }
 

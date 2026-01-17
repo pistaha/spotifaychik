@@ -25,6 +25,11 @@ namespace MusicService.Application.Albums.Queries
             var recentThreshold = DateTime.UtcNow.AddDays(-30);
             IQueryable<Domain.Entities.Album> query = _dbContext.Albums.AsNoTracking();
 
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(a => a.CreatedById == request.UserId.Value);
+            }
+
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
                 var search = request.Search.Trim();

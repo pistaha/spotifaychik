@@ -53,6 +53,12 @@ namespace MusicService.Application.Albums.Commands
                     if (!artistExists)
                         throw new ArgumentException($"Artist with ID {request.ArtistId} not found");
 
+                    var creatorExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == request.CreatedById, cancellationToken);
+                    if (!creatorExists)
+                        throw new ArgumentException($"User with ID {request.CreatedById} not found");
+
                     var album = new Album
                     {
                         Title = request.Title,
@@ -61,7 +67,8 @@ namespace MusicService.Application.Albums.Commands
                         ReleaseDate = request.ReleaseDate,
                         Type = Enum.Parse<AlbumType>(request.Type),
                         Genres = request.Genres,
-                        ArtistId = request.ArtistId
+                        ArtistId = request.ArtistId,
+                        CreatedById = request.CreatedById
                     };
 
                     _dbContext.Albums.Add(album);

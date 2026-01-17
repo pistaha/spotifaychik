@@ -59,6 +59,12 @@ namespace MusicService.Application.Tracks.Commands
                     if (!artistExists)
                         throw new ArgumentException($"Artist with ID {request.ArtistId} not found");
 
+                    var creatorExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == request.CreatedById, cancellationToken);
+                    if (!creatorExists)
+                        throw new ArgumentException($"User with ID {request.CreatedById} not found");
+
                     var track = new Track
                     {
                         Title = request.Title,
@@ -69,6 +75,7 @@ namespace MusicService.Application.Tracks.Commands
                         IsExplicit = request.IsExplicit,
                         AlbumId = request.AlbumId,
                         ArtistId = request.ArtistId,
+                        CreatedById = request.CreatedById,
                         PlayCount = 0,
                         LikeCount = 0
                     };

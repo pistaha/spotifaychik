@@ -23,9 +23,17 @@ namespace MusicService.Application.Artists.Queries
         public async Task<List<ArtistDto>> Handle(GetTopArtistsQuery request, CancellationToken cancellationToken)
         {
             var nowYear = DateTime.UtcNow.Year;
-            return await _dbContext.Artists
+            var query = _dbContext.Artists
                 .AsNoTracking()
                 .OrderByDescending(a => a.MonthlyListeners)
+                .AsQueryable();
+
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(a => a.CreatedById == request.UserId.Value);
+            }
+
+            return await query
                 .Take(request.Count)
                 .Select(a => new ArtistDto
                 {

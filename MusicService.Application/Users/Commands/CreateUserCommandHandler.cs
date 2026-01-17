@@ -62,17 +62,34 @@ namespace MusicService.Application.Users.Commands
                     if (usernameExists)
                         throw new ArgumentException($"User with username {request.Username} already exists");
 
+                    var displayName = string.IsNullOrWhiteSpace(request.DisplayName)
+                        ? $"{request.FirstName} {request.LastName}".Trim()
+                        : request.DisplayName;
+                    if (string.IsNullOrWhiteSpace(displayName))
+                    {
+                        displayName = request.Username;
+                    }
+
+                    var hash = _passwordHasher.HashPassword(request.Password, out var salt);
+
                     var user = new User
                     {
                         Username = request.Username,
                         Email = request.Email,
-                        PasswordHash = _passwordHasher.HashPassword(request.Password),
-                        DisplayName = request.DisplayName,
+                        PasswordHash = hash,
+                        PasswordSalt = salt,
+                        FirstName = request.FirstName,
+                        LastName = request.LastName,
+                        DisplayName = displayName,
                         DateOfBirth = request.DateOfBirth,
                         Country = request.Country,
+                        PhoneNumber = request.PhoneNumber,
                         FavoriteGenres = request.FavoriteGenres,
-                        LastLogin = DateTime.UtcNow,
-                        ListenTimeMinutes = 0
+                        LastLoginAt = DateTime.UtcNow,
+                        ListenTimeMinutes = 0,
+                        IsActive = true,
+                        IsEmailConfirmed = false,
+                        IsDeleted = false
                     };
 
                     _dbContext.Users.Add(user);

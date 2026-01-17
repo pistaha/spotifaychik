@@ -113,20 +113,37 @@ namespace MusicService.Application.Users.Commands
 
                         var now = DateTime.UtcNow;
                         var genres = command.FavoriteGenres ?? new List<string>();
+                        var displayName = string.IsNullOrWhiteSpace(command.DisplayName)
+                            ? $"{command.FirstName} {command.LastName}".Trim()
+                            : command.DisplayName;
+                        if (string.IsNullOrWhiteSpace(displayName))
+                        {
+                            displayName = command.Username;
+                        }
+
+                        var hash = _passwordHasher.HashPassword(command.Password, out var salt);
+
                         var user = new User
                         {
                             Id = Guid.NewGuid(),
                             Username = command.Username,
                             Email = command.Email,
-                            PasswordHash = _passwordHasher.HashPassword(command.Password),
-                            DisplayName = command.DisplayName,
+                            PasswordHash = hash,
+                            PasswordSalt = salt,
+                            FirstName = command.FirstName,
+                            LastName = command.LastName,
+                            DisplayName = displayName,
                             DateOfBirth = command.DateOfBirth,
                             Country = command.Country,
+                            PhoneNumber = command.PhoneNumber,
                             FavoriteGenres = new List<string>(genres),
-                            LastLogin = now,
+                            LastLoginAt = now,
                             ListenTimeMinutes = 0,
                             CreatedAt = now,
-                            UpdatedAt = now
+                            UpdatedAt = now,
+                            IsActive = true,
+                            IsEmailConfirmed = false,
+                            IsDeleted = false
                         };
 
                         try
@@ -134,8 +151,8 @@ namespace MusicService.Application.Users.Commands
                             if (isPostgres)
                             {
                                 var rows = await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-INSERT INTO users (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""DisplayName"", ""ProfileImage"", ""DateOfBirth"", ""Country"", ""FavoriteGenres"", ""ListenTimeMinutes"", ""LastLogin"", ""CreatedAt"", ""UpdatedAt"")
-VALUES ({user.Id}, {user.Username}, {user.Email}, {user.PasswordHash}, {user.DisplayName}, {user.ProfileImage}, {user.DateOfBirth}, {user.Country}, {genres.ToArray()}, {user.ListenTimeMinutes}, {user.LastLogin}, {user.CreatedAt}, {user.UpdatedAt})
+INSERT INTO users (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""PasswordSalt"", ""FirstName"", ""LastName"", ""DisplayName"", ""ProfileImage"", ""DateOfBirth"", ""PhoneNumber"", ""Country"", ""FavoriteGenres"", ""ListenTimeMinutes"", ""LastLoginAt"", ""IsEmailConfirmed"", ""IsActive"", ""IsDeleted"", ""CreatedAt"", ""UpdatedAt"")
+VALUES ({user.Id}, {user.Username}, {user.Email}, {user.PasswordHash}, {user.PasswordSalt}, {user.FirstName}, {user.LastName}, {user.DisplayName}, {user.ProfileImage}, {user.DateOfBirth}, {user.PhoneNumber}, {user.Country}, {genres.ToArray()}, {user.ListenTimeMinutes}, {user.LastLoginAt}, {user.IsEmailConfirmed}, {user.IsActive}, {user.IsDeleted}, {user.CreatedAt}, {user.UpdatedAt})
 ON CONFLICT DO NOTHING;");
                                 if (rows == 0)
                                 {

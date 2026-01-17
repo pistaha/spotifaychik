@@ -3,11 +3,12 @@ namespace MusicService.Application.Users.Commands
 {
     public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
     {
+        private const string PasswordRuleMessage = "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, and a digit";
         public CreateUserCommandValidator()
         {
             RuleFor(x => x.Username)
                 .NotEmpty().WithMessage("Username is required")
-                .Length(3, 50).WithMessage("Username must be between 3 and 50 characters");
+                .Matches(@"^[a-zA-Z0-9._-]{3,50}$").WithMessage("Username can contain only letters, digits, dot, underscore, and dash");
 
             RuleFor(x => x.Email)
                 .NotEmpty().WithMessage("Email is required")
@@ -15,11 +16,14 @@ namespace MusicService.Application.Users.Commands
 
             RuleFor(x => x.Password)
                 .NotEmpty().WithMessage("Password is required")
-                .MinimumLength(6).WithMessage("Password must be at least 6 characters");
+                .MinimumLength(8).WithMessage(PasswordRuleMessage)
+                .Matches(@"[A-Z]").WithMessage(PasswordRuleMessage)
+                .Matches(@"[a-z]").WithMessage(PasswordRuleMessage)
+                .Matches(@"\d").WithMessage(PasswordRuleMessage);
 
             RuleFor(x => x.DisplayName)
                 .NotEmpty().WithMessage("Display name is required")
-                .MaximumLength(100).WithMessage("Display name cannot exceed 100 characters");
+                .MaximumLength(150).WithMessage("Display name cannot exceed 150 characters");
         }
     }
 }

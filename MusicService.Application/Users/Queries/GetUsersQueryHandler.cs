@@ -22,7 +22,8 @@ namespace MusicService.Application.Users.Queries
 
         public async Task<PagedResult<UserDto>> Handle(GetUsersQuery request, CancellationToken cancellationToken)
         {
-            IQueryable<Domain.Entities.User> query = _dbContext.Users.AsNoTracking();
+            IQueryable<Domain.Entities.User> query = _dbContext.Users.AsNoTracking()
+                .Where(u => !u.IsDeleted);
 
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
@@ -64,12 +65,17 @@ namespace MusicService.Application.Users.Queries
                     UpdatedAt = u.UpdatedAt,
                     Username = u.Username,
                     Email = u.Email,
+                    FirstName = u.FirstName,
+                    LastName = u.LastName,
                     DisplayName = u.DisplayName,
                     ProfileImage = u.ProfileImage,
+                    PhoneNumber = u.PhoneNumber,
                     Country = u.Country,
                     FavoriteGenres = u.FavoriteGenres,
                     ListenTimeMinutes = u.ListenTimeMinutes,
-                    LastLogin = u.LastLogin,
+                    LastLoginAt = u.LastLoginAt,
+                    IsEmailConfirmed = u.IsEmailConfirmed,
+                    IsActive = u.IsActive,
                     PlaylistCount = u.CreatedPlaylists.Count,
                     FollowingCount = u.FollowedArtists.Count + u.FollowedPlaylists.Count,
                     FollowerCount = u.Friends.Count

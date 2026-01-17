@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Common.Interfaces;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,13 +25,20 @@ namespace MusicService.Application.Albums.Queries
 
         public async Task<List<AlbumDto>> Handle(GetAlbumsByArtistQuery request, CancellationToken cancellationToken)
         {
-            var albums = await _dbContext.Albums
+            var query = _dbContext.Albums
                 .AsNoTracking()
                 .Where(a => a.ArtistId == request.ArtistId)
                 .Include(a => a.Artist)
                 .Include(a => a.Tracks)
                 .AsSplitQuery()
-                .ToListAsync(cancellationToken);
+                .AsQueryable();
+
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(a => a.CreatedById == request.UserId.Value);
+            }
+
+            var albums = await query.ToListAsync(cancellationToken);
             return _mapper.Map<List<AlbumDto>>(albums);
         }
     }

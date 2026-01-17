@@ -8,5 +8,6 @@ namespace MusicService.Application.Tracks.Queries
     {
         public int Count { get; init; } = 10;
         public string? TimeRange { get; init; } // "day", "week", "month", "year", "all"
+        public Guid? UserId { get; init; }
     }
 }

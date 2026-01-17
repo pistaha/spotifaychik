@@ -1,24 +1,34 @@
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Moq;
 using MusicService.API.Controllers;
 using MusicService.Application.Common;
+using MusicService.Application.Common.Interfaces;
 using MusicService.Application.Playlists.Commands;
 using MusicService.Application.Playlists.Dtos;
 using MusicService.Application.Playlists.Queries;
 using Xunit;
+using System.Collections.Generic;
+using System.Security.Claims;
 
 namespace Tests.MusicService.API.Tests.Controllers;
 
 public class PlaylistsControllerTests
 {
     private readonly Mock<IMediator> _mediator = new();
+    private readonly Mock<ISecurityAuditService> _auditService = new();
+    private readonly Mock<IAuthorizationService> _authorizationService = new();
     private readonly PlaylistsController _controller;
 
     public PlaylistsControllerTests()
     {
-        _controller = new PlaylistsController(_mediator.Object);
+        _authorizationService
+            .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+            .ReturnsAsync(AuthorizationResult.Success());
+        _controller = new PlaylistsController(_mediator.Object, _auditService.Object, _authorizationService.Object);
     }
 
     [Fact]
@@ -37,6 +47,7 @@ public class PlaylistsControllerTests
     [Fact]
     public async Task CreatePlaylist_ShouldReturnCreatedAtAction()
     {
+        SetUser(Guid.NewGuid());
         var playlist = new PlaylistDto { Id = Guid.NewGuid(), Title = "Road Trip" };
         _mediator.Setup(m => m.Send(It.IsAny<CreatePlaylistCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(playlist);
@@ -72,5 +83,15 @@ public class PlaylistsControllerTests
         var result = await _controller.GetPublicPlaylists(CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    private void SetUser(Guid userId)
+    {
+        var claims = new List<Claim> { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) };
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = principal }
+        };
     }
 }

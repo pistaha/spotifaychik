@@ -28,5 +28,15 @@ namespace MusicService.Application.Common
                 Errors = new List<string> { errorMessage }
             };
         }
+
+        public static ApiResponse<T> ErrorResult(string errorMessage, List<string> errors)
+        {
+            return new ApiResponse<T>
+            {
+                Success = false,
+                Message = errorMessage,
+                Errors = errors
+            };
+        }
     }
 }

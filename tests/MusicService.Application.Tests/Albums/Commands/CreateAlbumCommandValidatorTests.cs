@@ -18,7 +18,8 @@ public class CreateAlbumCommandValidatorTests
             Description = "A stellar release",
             ReleaseDate = DateTime.UtcNow.AddDays(-1),
             Type = "Album",
-            ArtistId = Guid.NewGuid()
+            ArtistId = Guid.NewGuid(),
+            CreatedById = Guid.NewGuid()
         };
 
         var result = _validator.Validate(command);
@@ -35,7 +36,8 @@ public class CreateAlbumCommandValidatorTests
             Description = new string('a', 1001),
             ReleaseDate = DateTime.UtcNow.AddDays(-1),
             Type = "Album",
-            ArtistId = Guid.NewGuid()
+            ArtistId = Guid.NewGuid(),
+            CreatedById = Guid.NewGuid()
         };
 
         var result = _validator.Validate(command);
@@ -53,7 +55,8 @@ public class CreateAlbumCommandValidatorTests
             Title = "Experimental Record",
             ReleaseDate = DateTime.UtcNow.AddDays(-1),
             Type = "Gibberish",
-            ArtistId = Guid.NewGuid()
+            ArtistId = Guid.NewGuid(),
+            CreatedById = Guid.NewGuid()
         };
 
         var result = _validator.Validate(command);
@@ -72,7 +75,8 @@ public class CreateAlbumCommandValidatorTests
             Title = "Future Drop",
             ReleaseDate = DateTime.UtcNow.AddDays(10),
             Type = "Album",
-            ArtistId = Guid.NewGuid()
+            ArtistId = Guid.NewGuid(),
+            CreatedById = Guid.NewGuid()
         };
 
         var result = _validator.Validate(command);

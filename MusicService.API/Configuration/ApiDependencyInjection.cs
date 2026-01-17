@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MusicService.API.Authentication;
+using MusicService.API.Authorization;
 using MusicService.Infrastructure.Persistence;
 using System;
 using System.Reflection;
@@ -86,7 +88,8 @@ namespace MusicService.API.Configuration
                     Name = "Authorization",
                     In = ParameterLocation.Header,
                     Type = SecuritySchemeType.Http,
-                    Scheme = "bearer"
+                    Scheme = "bearer",
+                    BearerFormat = "JWT"
                 });
 
                 c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -151,8 +154,8 @@ namespace MusicService.API.Configuration
                             "https://musicservice.com",
                             "https://www.musicservice.com",
                             "https://api.musicservice.com")
-                          .AllowAnyMethod()
-                          .AllowAnyHeader()
+                          .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH")
+                          .WithHeaders("Authorization", "Content-Type")
                           .AllowCredentials();
                 });
             });
@@ -165,7 +168,7 @@ namespace MusicService.API.Configuration
             var jwtSection = configuration.GetSection("JwtSettings");
             var jwtIssuer = jwtSection["Issuer"];
             var jwtAudience = jwtSection["Audience"];
-            var jwtSecret = jwtSection["SecretKey"];
+            var jwtSecret = jwtSection["Secret"];
             var jwtConfigured = !string.IsNullOrWhiteSpace(jwtIssuer) &&
                                 !string.IsNullOrWhiteSpace(jwtAudience) &&
                                 !string.IsNullOrWhiteSpace(jwtSecret);
@@ -184,19 +187,41 @@ namespace MusicService.API.Configuration
                             ValidateIssuerSigningKey = true,
                             ValidIssuer = jwtIssuer,
                             ValidAudience = jwtAudience,
-                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret ?? throw new InvalidOperationException("JwtSettings:Secret is not configured."))),
                             ClockSkew = TimeSpan.FromMinutes(2)
                         };
                     });
 
-                services.AddAuthorization();
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
+                options.AddPolicy("RequireModeratorOrAdmin", policy => policy.RequireRole("Admin", "Moderator"));
+                options.AddPolicy("RequireEmailConfirmed", policy => policy.RequireClaim("EmailConfirmed", "true"));
+                options.AddPolicy("RequirePremiumSubscription", policy => policy.RequireClaim("SubscriptionLevel", "Premium", "Enterprise"));
+                options.AddPolicy("RequireMinimumAge", policy => policy.Requirements.Add(new MinimumAgeRequirement(18)));
+                options.AddPolicy("CanDeleteTracks", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteTracks")));
+                options.AddPolicy("CanEditMetadata", policy => policy.Requirements.Add(new PermissionRequirement("CanEditMetadata")));
+                options.AddPolicy("CanViewAuditLogs", policy => policy.Requirements.Add(new PermissionRequirement("CanViewAuditLogs")));
+                options.AddPolicy("CanManageUsers", policy => policy.RequireRole("Admin"));
+            });
             }
             else if ((env.IsDevelopment() || env.IsEnvironment("Test") || env.IsEnvironment("Testing")) &&
                      configuration.GetValue<bool>("Auth:EnableDevelopmentAuth"))
             {
                 services.AddAuthentication("Development")
                     .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthHandler>("Development", _ => { });
-                services.AddAuthorization();
+                services.AddAuthorization(options =>
+                {
+                    options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
+                    options.AddPolicy("RequireModeratorOrAdmin", policy => policy.RequireRole("Admin", "Moderator"));
+                    options.AddPolicy("RequireEmailConfirmed", policy => policy.RequireClaim("EmailConfirmed", "true"));
+                    options.AddPolicy("RequirePremiumSubscription", policy => policy.RequireClaim("SubscriptionLevel", "Premium", "Enterprise"));
+                    options.AddPolicy("RequireMinimumAge", policy => policy.Requirements.Add(new MinimumAgeRequirement(18)));
+                    options.AddPolicy("CanDeleteTracks", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteTracks")));
+                    options.AddPolicy("CanEditMetadata", policy => policy.Requirements.Add(new PermissionRequirement("CanEditMetadata")));
+                    options.AddPolicy("CanViewAuditLogs", policy => policy.Requirements.Add(new PermissionRequirement("CanViewAuditLogs")));
+                    options.AddPolicy("CanManageUsers", policy => policy.RequireRole("Admin"));
+                });
             }
             else
             {
@@ -205,6 +230,9 @@ namespace MusicService.API.Configuration
 
             services.Configure<JwtSettings>(jwtSection);
             services.AddSingleton<IJwtTokenService, JwtTokenService>();
+            services.AddScoped<IAuthorizationHandler, MinimumAgeAuthorizationHandler>();
+            services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+            services.AddScoped<IAuthorizationHandler, ResourceOwnerAuthorizationHandler>();
 
             // Response Compression
             services.AddResponseCompression(options =>

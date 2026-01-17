@@ -22,7 +22,7 @@ namespace MusicService.Application.Users.Queries
         {
             return await _dbContext.Users
                 .AsNoTracking()
-                .Where(u => u.Id == request.UserId)
+                .Where(u => u.Id == request.UserId && !u.IsDeleted)
                 .Select(u => new UserDto
                 {
                     Id = u.Id,
@@ -30,12 +30,17 @@ namespace MusicService.Application.Users.Queries
                     UpdatedAt = u.UpdatedAt,
                     Username = u.Username,
                     Email = u.Email,
+                    FirstName = u.FirstName,
+                    LastName = u.LastName,
                     DisplayName = u.DisplayName,
                     ProfileImage = u.ProfileImage,
+                    PhoneNumber = u.PhoneNumber,
                     Country = u.Country,
                     FavoriteGenres = u.FavoriteGenres,
                     ListenTimeMinutes = u.ListenTimeMinutes,
-                    LastLogin = u.LastLogin,
+                    LastLoginAt = u.LastLoginAt,
+                    IsEmailConfirmed = u.IsEmailConfirmed,
+                    IsActive = u.IsActive,
                     PlaylistCount = u.CreatedPlaylists.Count,
                     FollowingCount = u.FollowedArtists.Count + u.FollowedPlaylists.Count,
                     FollowerCount = u.Friends.Count

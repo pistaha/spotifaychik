@@ -21,6 +21,8 @@ namespace MusicService.Domain.Entities
         public Album? Album { get; set; }
         public Guid ArtistId { get; set; }
         public Artist? Artist { get; set; }
+        public Guid? CreatedById { get; set; }
+        public User? CreatedBy { get; set; }
         public List<PlaylistTrack> PlaylistTracks { get; set; } = new();
         public List<User> LikedByUsers { get; set; } = new();
         public List<ListenHistory> ListenHistory { get; set; } = new();

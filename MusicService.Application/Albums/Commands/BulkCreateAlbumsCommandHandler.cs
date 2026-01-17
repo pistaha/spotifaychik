@@ -62,12 +62,19 @@ namespace MusicService.Application.Albums.Commands
 
                     var supportsSavepoints = transaction?.SupportsSavepoints == true;
                     var artistIds = commandsToProcess.Select(c => c.ArtistId).Distinct().ToList();
+                    var creatorIds = commandsToProcess.Select(c => c.CreatedById).Distinct().ToList();
                     var existingArtistIds = await _dbContext.Artists
                         .AsNoTracking()
                         .Where(a => artistIds.Contains(a.Id))
                         .Select(a => a.Id)
                         .ToListAsync(cancellationToken);
                     var existingSet = new HashSet<Guid>(existingArtistIds);
+                    var existingCreatorIds = await _dbContext.Users
+                        .AsNoTracking()
+                        .Where(u => creatorIds.Contains(u.Id))
+                        .Select(u => u.Id)
+                        .ToListAsync(cancellationToken);
+                    var creatorSet = new HashSet<Guid>(existingCreatorIds);
 
                     var itemIndex = 0;
                     foreach (var command in commandsToProcess)
@@ -90,6 +97,21 @@ namespace MusicService.Application.Albums.Commands
                                 Success = false,
                                 Message = $"Artist with ID {command.ArtistId} not found",
                                 Error = "Artist not found"
+                            });
+                            continue;
+                        }
+
+                        if (!creatorSet.Contains(command.CreatedById))
+                        {
+                            if (supportsSavepoints && transaction != null)
+                            {
+                                await transaction.ReleaseSavepointAsync(savepointName, cancellationToken);
+                            }
+                            attemptItems.Add(new BulkOperationItem<AlbumDto>
+                            {
+                                Success = false,
+                                Message = $"User with ID {command.CreatedById} not found",
+                                Error = "User not found"
                             });
                             continue;
                         }
@@ -126,6 +148,7 @@ namespace MusicService.Application.Albums.Commands
                                 Type = albumType,
                                 Genres = genres,
                                 ArtistId = command.ArtistId,
+                                CreatedById = command.CreatedById,
                                 TotalDurationMinutes = 0,
                                 CreatedAt = now,
                                 UpdatedAt = now
@@ -134,8 +157,8 @@ namespace MusicService.Application.Albums.Commands
                             if (isPostgres)
                             {
                                 var rows = await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
-INSERT INTO albums (""Id"", ""Title"", ""Description"", ""CoverImage"", ""ReleaseDate"", ""Type"", ""Genres"", ""TotalDurationMinutes"", ""ArtistId"", ""CreatedAt"", ""UpdatedAt"")
-VALUES ({album.Id}, {album.Title}, {album.Description}, {album.CoverImage}, {album.ReleaseDate}, {(int)album.Type}, {genres.ToArray()}, {album.TotalDurationMinutes}, {album.ArtistId}, {album.CreatedAt}, {album.UpdatedAt})
+INSERT INTO albums (""Id"", ""Title"", ""Description"", ""CoverImage"", ""ReleaseDate"", ""Type"", ""Genres"", ""TotalDurationMinutes"", ""ArtistId"", ""CreatedById"", ""CreatedAt"", ""UpdatedAt"")
+VALUES ({album.Id}, {album.Title}, {album.Description}, {album.CoverImage}, {album.ReleaseDate}, {(int)album.Type}, {genres.ToArray()}, {album.TotalDurationMinutes}, {album.ArtistId}, {album.CreatedById}, {album.CreatedAt}, {album.UpdatedAt})
 ON CONFLICT DO NOTHING;");
                                 if (rows == 0)
                                 {

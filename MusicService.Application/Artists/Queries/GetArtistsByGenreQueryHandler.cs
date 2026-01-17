@@ -24,9 +24,16 @@ namespace MusicService.Application.Artists.Queries
         {
             var genre = request.Genre.Trim();
             var nowYear = DateTime.UtcNow.Year;
-            return await _dbContext.Artists
+            var query = _dbContext.Artists
                 .AsNoTracking()
-                .Where(a => a.Genres.Any(g => g == genre))
+                .Where(a => a.Genres.Any(g => g == genre));
+
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(a => a.CreatedById == request.UserId.Value);
+            }
+
+            return await query
                 .Select(a => new ArtistDto
                 {
                     Id = a.Id,

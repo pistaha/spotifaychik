@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using MusicService.API.Controllers;
@@ -18,6 +19,7 @@ using MusicService.Application.Common.Dtos;
 using MusicService.Application.Playlists.Commands;
 using MusicService.Application.Playlists.Dtos;
 using MusicService.Application.Playlists.Queries;
+using System.Security.Claims;
 using MusicService.Application.Search.Dtos;
 using MusicService.Application.Search.Queries;
 using MusicService.Application.Tracks.Dtos;
@@ -25,9 +27,10 @@ using MusicService.Application.Tracks.Queries;
 using MusicService.Application.Users.Commands;
 using MusicService.Application.Users.Dtos;
 using MusicService.Application.Users.Queries;
-using MusicService.API.Authentication;
 using MusicService.API.Models;
-using Microsoft.Extensions.Options;
+using System.Linq;
+using MusicService.Application.Common.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Xunit;
 
 namespace Tests.EFCoreTests
@@ -54,6 +57,7 @@ namespace Tests.EFCoreTests
                 .ReturnsAsync(new PagedResult<AlbumDto>(new List<AlbumDto>(), 0, 1, 10));
 
             var controller = new AlbumsController(mediator.Object);
+            SetUser(controller, Guid.NewGuid(), "Admin");
             var notFound = await controller.GetAlbum(Guid.NewGuid(), CancellationToken.None);
             notFound.Result.Should().BeOfType<NotFoundObjectResult>();
 
@@ -90,6 +94,7 @@ namespace Tests.EFCoreTests
                 .ReturnsAsync(new List<ArtistDto>());
 
             var controller = new ArtistsController(mediator.Object);
+            SetUser(controller, Guid.NewGuid(), "Admin");
             var notFound = await controller.GetArtist(Guid.NewGuid(), CancellationToken.None);
             notFound.Result.Should().BeOfType<NotFoundObjectResult>();
 
@@ -115,6 +120,17 @@ namespace Tests.EFCoreTests
                 .ReturnsAsync(new List<TrackDto>());
 
             var controller = new TracksController(mediator.Object);
+            controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                        new Claim(ClaimTypes.Role, "Admin")
+                    }, "Test"))
+                }
+            };
             var notFound = await controller.GetTrack(Guid.NewGuid(), CancellationToken.None);
             notFound.Result.Should().BeOfType<NotFoundObjectResult>();
 
@@ -138,7 +154,13 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<GetPublicPlaylistsQuery>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<PlaylistDto>());
 
-            var controller = new PlaylistsController(mediator.Object);
+            var auditService = new Mock<ISecurityAuditService>();
+            var authorizationService = new Mock<IAuthorizationService>();
+            authorizationService
+                .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+                .ReturnsAsync(AuthorizationResult.Success());
+            var controller = new PlaylistsController(mediator.Object, auditService.Object, authorizationService.Object);
+            SetUser(controller, Guid.NewGuid());
             var notFound = await controller.GetPlaylist(Guid.NewGuid(), null, CancellationToken.None);
             notFound.Result.Should().BeOfType<NotFoundObjectResult>();
 
@@ -171,14 +193,14 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<GetUsersQuery>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<UserDto>(new List<UserDto>(), 0, 1, 10));
 
-            var jwtOptions = Options.Create(new JwtSettings
-            {
-                Issuer = "MusicService",
-                Audience = "MusicServiceUsers",
-                SecretKey = "test-secret-key-min-32-chars-long"
-            });
-            var tokenService = new JwtTokenService(jwtOptions);
-            var controller = new UsersController(mediator.Object, tokenService, jwtOptions);
+            var authorizationService = new Mock<IAuthorizationService>();
+            authorizationService
+                .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+                .ReturnsAsync(AuthorizationResult.Success());
+            var auditService = new Mock<ISecurityAuditService>();
+            var dbContext = new Mock<IMusicServiceDbContext>();
+            var controller = new UsersController(mediator.Object, authorizationService.Object, auditService.Object, dbContext.Object);
+            SetUser(controller, Guid.NewGuid(), "Admin");
             var notFound = await controller.GetUser(Guid.NewGuid(), CancellationToken.None);
             notFound.Result.Should().BeOfType<NotFoundObjectResult>();
 
@@ -208,15 +230,16 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<AddFriendCommand>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(AddFriendResult.UserMissing());
 
-            var jwtOptions = Options.Create(new JwtSettings
-            {
-                Issuer = "MusicService",
-                Audience = "MusicServiceUsers",
-                SecretKey = "test-secret-key-min-32-chars-long"
-            });
-            var tokenService = new JwtTokenService(jwtOptions);
-            var controller = new UsersController(mediator.Object, tokenService, jwtOptions);
-            var result = await controller.AddFriend(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+            var authorizationService = new Mock<IAuthorizationService>();
+            authorizationService
+                .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+                .ReturnsAsync(AuthorizationResult.Success());
+            var auditService = new Mock<ISecurityAuditService>();
+            var dbContext = new Mock<IMusicServiceDbContext>();
+            var controller = new UsersController(mediator.Object, authorizationService.Object, auditService.Object, dbContext.Object);
+            var userId = Guid.NewGuid();
+            SetUser(controller, userId);
+            var result = await controller.AddFriend(userId, Guid.NewGuid(), CancellationToken.None);
 
             result.Result.Should().BeOfType<NotFoundObjectResult>();
         }
@@ -228,15 +251,16 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<AddFriendCommand>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(AddFriendResult.FriendMissing());
 
-            var jwtOptions = Options.Create(new JwtSettings
-            {
-                Issuer = "MusicService",
-                Audience = "MusicServiceUsers",
-                SecretKey = "test-secret-key-min-32-chars-long"
-            });
-            var tokenService = new JwtTokenService(jwtOptions);
-            var controller = new UsersController(mediator.Object, tokenService, jwtOptions);
-            var result = await controller.AddFriend(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+            var authorizationService = new Mock<IAuthorizationService>();
+            authorizationService
+                .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+                .ReturnsAsync(AuthorizationResult.Success());
+            var auditService = new Mock<ISecurityAuditService>();
+            var dbContext = new Mock<IMusicServiceDbContext>();
+            var controller = new UsersController(mediator.Object, authorizationService.Object, auditService.Object, dbContext.Object);
+            var userId = Guid.NewGuid();
+            SetUser(controller, userId);
+            var result = await controller.AddFriend(userId, Guid.NewGuid(), CancellationToken.None);
 
             result.Result.Should().BeOfType<NotFoundObjectResult>();
         }
@@ -248,15 +272,16 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<AddFriendCommand>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(AddFriendResult.AlreadyFriends());
 
-            var jwtOptions = Options.Create(new JwtSettings
-            {
-                Issuer = "MusicService",
-                Audience = "MusicServiceUsers",
-                SecretKey = "test-secret-key-min-32-chars-long"
-            });
-            var tokenService = new JwtTokenService(jwtOptions);
-            var controller = new UsersController(mediator.Object, tokenService, jwtOptions);
-            var result = await controller.AddFriend(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+            var authorizationService = new Mock<IAuthorizationService>();
+            authorizationService
+                .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+                .ReturnsAsync(AuthorizationResult.Success());
+            var auditService = new Mock<ISecurityAuditService>();
+            var dbContext = new Mock<IMusicServiceDbContext>();
+            var controller = new UsersController(mediator.Object, authorizationService.Object, auditService.Object, dbContext.Object);
+            var userId = Guid.NewGuid();
+            SetUser(controller, userId);
+            var result = await controller.AddFriend(userId, Guid.NewGuid(), CancellationToken.None);
 
             result.Result.Should().BeOfType<ConflictObjectResult>();
         }
@@ -268,15 +293,16 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<AddFriendCommand>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(AddFriendResult.Failed());
 
-            var jwtOptions = Options.Create(new JwtSettings
-            {
-                Issuer = "MusicService",
-                Audience = "MusicServiceUsers",
-                SecretKey = "test-secret-key-min-32-chars-long"
-            });
-            var tokenService = new JwtTokenService(jwtOptions);
-            var controller = new UsersController(mediator.Object, tokenService, jwtOptions);
-            var result = await controller.AddFriend(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None);
+            var authorizationService = new Mock<IAuthorizationService>();
+            authorizationService
+                .Setup(a => a.AuthorizeAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<object?>(), It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
+                .ReturnsAsync(AuthorizationResult.Success());
+            var auditService = new Mock<ISecurityAuditService>();
+            var dbContext = new Mock<IMusicServiceDbContext>();
+            var controller = new UsersController(mediator.Object, authorizationService.Object, auditService.Object, dbContext.Object);
+            var userId = Guid.NewGuid();
+            SetUser(controller, userId);
+            var result = await controller.AddFriend(userId, Guid.NewGuid(), CancellationToken.None);
 
             result.Result.Should().BeOfType<BadRequestObjectResult>();
         }
@@ -301,6 +327,21 @@ namespace Tests.EFCoreTests
 
             var global = await controller.GlobalSearch("query", 5, CancellationToken.None);
             global.Result.Should().BeOfType<OkObjectResult>();
+        }
+
+        private static void SetUser(ControllerBase controller, Guid userId, params string[] roles)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                new Claim(ClaimTypes.Name, "test")
+            };
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+            controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = principal }
+            };
         }
     }
 }

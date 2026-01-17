@@ -20,7 +20,8 @@ public class BulkCreateUsersCommandHandlerTests
         {
             Commands = new List<CreateUserCommand> { new() { Username = "u", Email = "e@test.com", Password = "p" } }
         };
-        _passwordHasher.Setup(h => h.HashPassword("p")).Returns("hashed");
+        var salt = "salt";
+        _passwordHasher.Setup(h => h.HashPassword("p", out salt)).Returns("hashed");
         var handler = new BulkCreateUsersCommandHandler(
             dbContext,
             _passwordHasher.Object,
@@ -45,6 +46,8 @@ public class BulkCreateUsersCommandHandlerTests
                 new() { Username = "u2", Email = "dup@test.com", Password = "p" }
             }
         };
+        var salt = "salt";
+        _passwordHasher.Setup(h => h.HashPassword("p", out salt)).Returns("hashed");
         var handler = new BulkCreateUsersCommandHandler(
             dbContext,
             _passwordHasher.Object,

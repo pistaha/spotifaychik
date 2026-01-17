@@ -14,12 +14,24 @@ public class BulkCreateAlbumsCommandHandlerTests
     {
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
         dbContext.Artists.Add(new Artist
         {
             Id = artistId,
             Name = "Artist",
             Country = "US",
             Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
         });
         await dbContext.SaveChangesAsync();
 
@@ -30,6 +42,7 @@ public class BulkCreateAlbumsCommandHandlerTests
                 new()
                 {
                     ArtistId = artistId,
+                    CreatedById = creatorId,
                     Title = "A",
                     Type = "Album",
                     ReleaseDate = DateTime.UtcNow,
@@ -53,6 +66,19 @@ public class BulkCreateAlbumsCommandHandlerTests
     {
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
         var command = new BulkCreateAlbumsCommand
         {
             Commands = new List<CreateAlbumCommand>
@@ -60,6 +86,7 @@ public class BulkCreateAlbumsCommandHandlerTests
                 new()
                 {
                     ArtistId = artistId,
+                    CreatedById = creatorId,
                     Title = "A",
                     Type = "Album",
                     ReleaseDate = DateTime.UtcNow

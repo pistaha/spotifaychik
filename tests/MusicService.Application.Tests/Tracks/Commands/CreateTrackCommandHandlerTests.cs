@@ -15,6 +15,7 @@ public class CreateTrackCommandHandlerTests
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
         var albumId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
         dbContext.Artists.Add(new Artist
         {
             Id = artistId,
@@ -31,6 +32,17 @@ public class CreateTrackCommandHandlerTests
             Type = AlbumType.Album,
             Genres = new List<string>()
         });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
         await dbContext.SaveChangesAsync();
 
         var command = new CreateTrackCommand
@@ -40,7 +52,8 @@ public class CreateTrackCommandHandlerTests
             TrackNumber = 3,
             IsExplicit = false,
             AlbumId = albumId,
-            ArtistId = artistId
+            ArtistId = artistId,
+            CreatedById = creatorId
         };
         var handler = new CreateTrackCommandHandler(
             dbContext,
@@ -58,12 +71,24 @@ public class CreateTrackCommandHandlerTests
     {
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
         dbContext.Artists.Add(new Artist
         {
             Id = artistId,
             Name = "Artist",
             Country = "US",
             Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
         });
         await dbContext.SaveChangesAsync();
 
@@ -73,7 +98,8 @@ public class CreateTrackCommandHandlerTests
             DurationSeconds = 240,
             TrackNumber = 1,
             AlbumId = Guid.NewGuid(),
-            ArtistId = artistId
+            ArtistId = artistId,
+            CreatedById = creatorId
         };
         var handler = new CreateTrackCommandHandler(
             dbContext,
@@ -92,6 +118,7 @@ public class CreateTrackCommandHandlerTests
         using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
         var albumId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
         dbContext.Artists.Add(new Artist
         {
             Id = artistId,
@@ -108,6 +135,17 @@ public class CreateTrackCommandHandlerTests
             Type = AlbumType.Album,
             Genres = new List<string>()
         });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
         await dbContext.SaveChangesAsync();
 
         var command = new CreateTrackCommand
@@ -116,7 +154,8 @@ public class CreateTrackCommandHandlerTests
             DurationSeconds = 240,
             TrackNumber = 1,
             AlbumId = albumId,
-            ArtistId = Guid.NewGuid()
+            ArtistId = Guid.NewGuid(),
+            CreatedById = creatorId
         };
         var handler = new CreateTrackCommandHandler(
             dbContext,

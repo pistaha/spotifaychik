@@ -26,7 +26,6 @@ namespace MusicService.Infrastructure.Persistence.Migrations
                 .WithColumn("Country").AsString(80).NotNullable().WithDefaultValue("Unknown")
                 .WithColumn("FavoriteGenres").AsCustom("text[]").NotNullable().WithDefaultValue("{}")
                 .WithColumn("ListenTimeMinutes").AsInt32().NotNullable().WithDefaultValue(0)
-                .WithColumn("LastLogin").AsDateTime().NotNullable().WithDefaultValue(SystemMethods.CurrentUTCDateTime)
                 .WithColumn("CreatedAt").AsDateTime().NotNullable().WithDefaultValue(SystemMethods.CurrentUTCDateTime)
                 .WithColumn("UpdatedAt").AsDateTime().NotNullable().WithDefaultValue(SystemMethods.CurrentUTCDateTime);
 
@@ -197,3 +196,4 @@ namespace MusicService.Infrastructure.Persistence.Migrations
     }
 }
   
+
