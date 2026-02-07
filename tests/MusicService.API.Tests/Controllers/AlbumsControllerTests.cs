@@ -9,6 +9,7 @@ using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Albums.Queries;
 using MusicService.Application.Common;
 using MusicService.Application.Common.Dtos;
+using MusicService.Application.Common.Interfaces;
 using System.Linq;
 using System.Security.Claims;
 using Xunit;
@@ -18,11 +19,12 @@ namespace Tests.MusicService.API.Tests.Controllers;
 public class AlbumsControllerTests
 {
     private readonly Mock<IMediator> _mediator = new();
+    private readonly Mock<IMusicServiceDbContext> _dbContext = new();
     private readonly AlbumsController _controller;
 
     public AlbumsControllerTests()
     {
-        _controller = new AlbumsController(_mediator.Object);
+        _controller = new AlbumsController(_mediator.Object, _dbContext.Object);
         _controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext

@@ -23,7 +23,8 @@ namespace MusicService.Domain.Entities
         SuspiciousActivity = 17,
         ExpiredTokenUsed = 18,
         ResourceAccessDenied = 19,
-        UnusualIpAddress = 20
+        UnusualIpAddress = 20,
+        FileDownloaded = 21
     }
 
     public class SecurityAuditLog

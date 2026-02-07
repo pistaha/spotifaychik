@@ -85,12 +85,27 @@ namespace MusicService.Application.Users.Commands
                         Country = request.Country,
                         PhoneNumber = request.PhoneNumber,
                         FavoriteGenres = request.FavoriteGenres,
-                        LastLoginAt = DateTime.UtcNow,
+                        LastLoginAt = null,
                         ListenTimeMinutes = 0,
                         IsActive = true,
                         IsEmailConfirmed = false,
                         IsDeleted = false
                     };
+
+                    var userRoleId = await _dbContext.Roles
+                        .AsNoTracking()
+                        .Where(r => r.Name == "User")
+                        .Select(r => (Guid?)r.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (userRoleId.HasValue)
+                    {
+                        _dbContext.UserRoles.Add(new UserRole
+                        {
+                            UserId = user.Id,
+                            RoleId = userRoleId.Value,
+                            AssignedAt = DateTime.UtcNow
+                        });
+                    }
 
                     _dbContext.Users.Add(user);
                     await _dbContext.SaveChangesAsync(cancellationToken);

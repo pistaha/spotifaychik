@@ -42,6 +42,12 @@ namespace MusicService.Application.Users.Commands
                 TotalCount = request.Commands.Count
             };
 
+            var userRoleId = await _dbContext.Roles
+                .AsNoTracking()
+                .Where(r => r.Name == "User")
+                .Select(r => (Guid?)r.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
             var initialFailures = new List<BulkOperationItem<UserDto>>();
             var commandsToProcess = new List<CreateUserCommand>();
             var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -137,7 +143,7 @@ namespace MusicService.Application.Users.Commands
                             Country = command.Country,
                             PhoneNumber = command.PhoneNumber,
                             FavoriteGenres = new List<string>(genres),
-                            LastLoginAt = now,
+                            LastLoginAt = null,
                             ListenTimeMinutes = 0,
                             CreatedAt = now,
                             UpdatedAt = now,
@@ -168,6 +174,14 @@ ON CONFLICT DO NOTHING;");
                                     });
                                     continue;
                                 }
+
+                                if (userRoleId.HasValue)
+                                {
+                                    await _dbContext.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO user_roles (""UserId"", ""RoleId"", ""AssignedAt"")
+VALUES ({user.Id}, {userRoleId.Value}, {now})
+ON CONFLICT DO NOTHING;");
+                                }
                             }
                             else
                             {
@@ -176,6 +190,15 @@ ON CONFLICT DO NOTHING;");
                                     efContext.ChangeTracker.Clear();
                                 }
                                 _dbContext.Users.Add(user);
+                                if (userRoleId.HasValue)
+                                {
+                                    _dbContext.UserRoles.Add(new UserRole
+                                    {
+                                        UserId = user.Id,
+                                        RoleId = userRoleId.Value,
+                                        AssignedAt = now
+                                    });
+                                }
                                 await _dbContext.SaveChangesAsync(cancellationToken);
                                 if (efContext != null)
                                 {

@@ -9,7 +9,6 @@ namespace MusicService.Domain.Entities
         public string Email { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
         public string PasswordSalt { get; set; } = string.Empty;
-        public string EmailConfirmationToken { get; set; } = string.Empty;
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
@@ -35,6 +34,8 @@ namespace MusicService.Domain.Entities
         public List<UserRole> UserRoles { get; set; } = new();
         public List<UserSession> Sessions { get; set; } = new();
         public List<UserClaim> Claims { get; set; } = new();
+        public List<FileMetadata> UploadedFiles { get; set; } = new();
+        public List<FileUploadSession> FileUploadSessions { get; set; } = new();
 
         public void AddListenTime(int minutes)
         {

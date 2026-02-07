@@ -625,7 +625,7 @@ namespace MusicService.API.Controllers
         /// 403 - доступ запрещен
         /// </remarks>
         [HttpGet("profile")]
-        [Authorize(Roles = "User,Admin")]
+        [Authorize]
         public async Task<ActionResult<ApiResponse<UserDto>>> Profile(CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
@@ -903,7 +903,12 @@ namespace MusicService.API.Controllers
                 ListenTimeMinutes = user.ListenTimeMinutes,
                 LastLoginAt = user.LastLoginAt,
                 IsEmailConfirmed = user.IsEmailConfirmed,
-                IsActive = user.IsActive
+                IsActive = user.IsActive,
+                Roles = user.UserRoles
+                    .Select(ur => ur.Role?.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name!)
+                    .ToList()
             };
         }
 

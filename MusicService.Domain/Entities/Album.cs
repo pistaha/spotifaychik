@@ -22,6 +22,7 @@ namespace MusicService.Domain.Entities
         public User? CreatedBy { get; set; }
         public List<Track> Tracks { get; set; } = new();
         public List<User> AddedByUsers { get; set; } = new();
+        public List<AlbumImage> Images { get; set; } = new();
 
         public bool IsRecentRelease()
         {

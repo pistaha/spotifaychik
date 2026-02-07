@@ -8,6 +8,11 @@ using FluentMigrator.Runner;
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 5L * 1024 * 1024 * 1024;
+});
+
 // Настройка стандартного логирования
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();

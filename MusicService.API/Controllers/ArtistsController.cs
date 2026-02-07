@@ -29,12 +29,16 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<ArtistDto>.ErrorResult("Invalid user"));
             }
 
-            var query = new GetArtistByIdQuery { ArtistId = id, UserId = IsPrivileged() ? null : userId };
+            var query = new GetArtistByIdQuery
+            {
+                ArtistId = id,
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
+            };
             var result = await _mediator.Send(query, cancellationToken);
             
             if (result == null)
@@ -71,7 +75,7 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<List<ArtistDto>>.ErrorResult("Invalid user"));
             }
@@ -79,7 +83,7 @@ namespace MusicService.API.Controllers
             var query = new GetTopArtistsQuery
             {
                 Count = count,
-                UserId = IsPrivileged() ? null : userId
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
             };
             var result = await _mediator.Send(query, cancellationToken);
             return Ok(ApiResponse<List<ArtistDto>>.SuccessResult(result, "Top artists retrieved successfully"));
@@ -93,7 +97,7 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<List<ArtistDto>>.ErrorResult("Invalid user"));
             }
@@ -101,7 +105,7 @@ namespace MusicService.API.Controllers
             var query = new GetArtistsByGenreQuery
             {
                 Genre = genre,
-                UserId = IsPrivileged() ? null : userId
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
             };
             var result = await _mediator.Send(query, cancellationToken);
             return Ok(ApiResponse<List<ArtistDto>>.SuccessResult(result, $"Artists in genre '{genre}' retrieved successfully"));
@@ -113,9 +117,5 @@ namespace MusicService.API.Controllers
             return Guid.TryParse(userId, out var id) ? id : null;
         }
 
-        private bool IsPrivileged()
-        {
-            return User.IsInRole("Admin") || User.IsInRole("Moderator");
-        }
     }
 }

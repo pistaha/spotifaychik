@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MusicService.API.Authentication;
 using MusicService.API.Authorization;
+using MusicService.API.Files;
 using MusicService.Infrastructure.Persistence;
 using System;
 using System.Reflection;
@@ -81,6 +84,14 @@ namespace MusicService.API.Configuration
                     c.IncludeXmlComments(xmlPath);
                 }
 
+                c.MapType<IFormFile>(() => new OpenApiSchema
+                {
+                    Type = "string",
+                    Format = "binary"
+                });
+
+                c.OperationFilter<FileUploadUiOperationFilter>();
+
                 // Добавляем поддержка авторизации в Swagger
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
@@ -136,6 +147,7 @@ namespace MusicService.API.Configuration
 
                     return true;
                 });
+
             });
 
             // CORS
@@ -163,6 +175,15 @@ namespace MusicService.API.Configuration
             // Health Checks
             services.AddHealthChecks()
                 .AddDbContextCheck<MusicServiceDbContext>("database");
+
+            services.Configure<FileStorageOptions>(configuration.GetSection("FileStorage"));
+            services.AddSingleton<FileValidationService>();
+            services.AddSingleton<ImageProcessingService>();
+
+            services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = configuration.GetValue<long>("FileStorage:MaxTotalUploadBytes", 104_857_600);
+            });
 
             // Authentication & Authorization (JWT)
             var jwtSection = configuration.GetSection("JwtSettings");

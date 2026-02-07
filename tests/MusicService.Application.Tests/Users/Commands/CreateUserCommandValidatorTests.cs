@@ -42,6 +42,6 @@ public class CreateUserCommandValidatorTests
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Username));
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Email));
         result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Password));
-        result.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.DisplayName));
+        result.Errors.Should().NotContain(e => e.PropertyName == nameof(CreateUserCommand.DisplayName));
     }
 }

@@ -1,4 +1,5 @@
 using AutoMapper;
+using System.Linq;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Artists.Dtos;
 using MusicService.Application.Playlists.Dtos;
@@ -16,7 +17,11 @@ namespace MusicService.Application.Common.Mapping
             CreateMap<User, UserDto>()
                 .ForMember(dest => dest.PlaylistCount, opt => opt.MapFrom(src => src.CreatedPlaylists.Count))
                 .ForMember(dest => dest.FollowingCount, opt => opt.MapFrom(src => src.FollowedArtists.Count + src.FollowedPlaylists.Count))
-                .ForMember(dest => dest.FollowerCount, opt => opt.MapFrom(src => src.Friends.Count));
+                .ForMember(dest => dest.FollowerCount, opt => opt.MapFrom(src => src.Friends.Count))
+                .ForMember(dest => dest.Roles, opt => opt.MapFrom(src =>
+                    src.UserRoles.Select(ur => ur.Role != null ? ur.Role.Name : string.Empty)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .ToList()));
 
             // Artists mapping
             CreateMap<Artist, ArtistDto>()

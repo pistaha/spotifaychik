@@ -56,7 +56,8 @@ namespace Tests.EFCoreTests
             mediator.Setup(m => m.Send(It.IsAny<GetAlbumsQuery>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new PagedResult<AlbumDto>(new List<AlbumDto>(), 0, 1, 10));
 
-            var controller = new AlbumsController(mediator.Object);
+            var dbContext = new Mock<IMusicServiceDbContext>();
+            var controller = new AlbumsController(mediator.Object, dbContext.Object);
             SetUser(controller, Guid.NewGuid(), "Admin");
             var notFound = await controller.GetAlbum(Guid.NewGuid(), CancellationToken.None);
             notFound.Result.Should().BeOfType<NotFoundObjectResult>();

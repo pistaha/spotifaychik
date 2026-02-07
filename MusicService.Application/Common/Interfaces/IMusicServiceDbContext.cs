@@ -16,6 +16,9 @@ namespace MusicService.Application.Common.Interfaces
         DbSet<Permission> Permissions { get; }
         DbSet<RolePermission> RolePermissions { get; }
         DbSet<SecurityAuditLog> SecurityAuditLogs { get; }
+        DbSet<FileMetadata> FileMetadatas { get; }
+        DbSet<FileUploadSession> FileUploadSessions { get; }
+        DbSet<AlbumImage> AlbumImages { get; }
         DbSet<Artist> Artists { get; }
         DbSet<Album> Albums { get; }
         DbSet<Track> Tracks { get; }

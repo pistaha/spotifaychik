@@ -29,6 +29,12 @@ namespace MusicService.Application.Users.Commands
         {
             _logger.LogInformation("Adding friend {FriendId} to user {UserId}", 
                 request.FriendId, request.UserId);
+
+            if (request.UserId == request.FriendId)
+            {
+                _logger.LogWarning("User cannot add themselves as a friend");
+                return AddFriendResult.Failed();
+            }
             
             var maxAttempts = 3;
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -63,12 +69,6 @@ namespace MusicService.Application.Users.Commands
                             return AddFriendResult.FriendMissing();
                         }
 
-                        if (request.UserId == request.FriendId)
-                        {
-                            _logger.LogWarning("User cannot add themselves as a friend");
-                            return AddFriendResult.Failed();
-                        }
-
                         if (user.Friends.Any(f => f.Id == request.FriendId))
                         {
                             _logger.LogInformation("Users are already friends");
@@ -86,44 +86,23 @@ namespace MusicService.Application.Users.Commands
 
                     if (!isPostgres)
                     {
-                        var userExistsNonPostgres = await _dbContext.Users
-                            .AsNoTracking()
-                            .AnyAsync(u => u.Id == request.UserId, cancellationToken);
-                        if (!userExistsNonPostgres)
-                        {
-                            _logger.LogWarning("User {UserId} not found", request.UserId);
-                            await transaction.RollbackAsync(cancellationToken);
-                            return AddFriendResult.UserMissing();
-                        }
-
-                        var friendExistsNonPostgres = await _dbContext.Users
-                            .AsNoTracking()
-                            .AnyAsync(u => u.Id == request.FriendId, cancellationToken);
-                        if (!friendExistsNonPostgres)
-                        {
-                            _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
-                            await transaction.RollbackAsync(cancellationToken);
-                            return AddFriendResult.FriendMissing();
-                        }
-
-                        if (request.UserId == request.FriendId)
-                        {
-                            _logger.LogWarning("User cannot add themselves as a friend");
-                            await transaction.RollbackAsync(cancellationToken);
-                            return AddFriendResult.Failed();
-                        }
-
                         var user = await _dbContext.Users
                             .Include(u => u.Friends)
                             .FirstOrDefaultAsync(u => u.Id == request.UserId, cancellationToken);
                         var friend = await _dbContext.Users
                             .FirstOrDefaultAsync(u => u.Id == request.FriendId, cancellationToken);
-                        if (user == null || friend == null)
+                        if (user == null)
                         {
+                            _logger.LogWarning("User {UserId} not found", request.UserId);
                             await transaction.RollbackAsync(cancellationToken);
-                            return AddFriendResult.Failed();
+                            return AddFriendResult.UserMissing();
                         }
-
+                        if (friend == null)
+                        {
+                            _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
+                            await transaction.RollbackAsync(cancellationToken);
+                            return AddFriendResult.FriendMissing();
+                        }
                         if (user.Friends.Any(f => f.Id == request.FriendId))
                         {
                             _logger.LogInformation("Users are already friends");
@@ -138,31 +117,22 @@ namespace MusicService.Application.Users.Commands
                         return AddFriendResult.Ok();
                     }
 
-                    var userExistsPostgres = await _dbContext.Users
+                    var existingIds = await _dbContext.Users
                         .AsNoTracking()
-                        .AnyAsync(u => u.Id == request.UserId, cancellationToken);
-                    if (!userExistsPostgres)
+                        .Where(u => u.Id == request.UserId || u.Id == request.FriendId)
+                        .Select(u => u.Id)
+                        .ToListAsync(cancellationToken);
+                    if (!existingIds.Contains(request.UserId))
                     {
                         _logger.LogWarning("User {UserId} not found", request.UserId);
                         await transaction.RollbackAsync(cancellationToken);
                         return AddFriendResult.UserMissing();
                     }
-
-                    var friendExistsPostgres = await _dbContext.Users
-                        .AsNoTracking()
-                        .AnyAsync(u => u.Id == request.FriendId, cancellationToken);
-                    if (!friendExistsPostgres)
+                    if (!existingIds.Contains(request.FriendId))
                     {
                         _logger.LogWarning("Friend {FriendId} not found", request.FriendId);
                         await transaction.RollbackAsync(cancellationToken);
                         return AddFriendResult.FriendMissing();
-                    }
-
-                    if (request.UserId == request.FriendId)
-                    {
-                        _logger.LogWarning("User cannot add themselves as a friend");
-                        await transaction.RollbackAsync(cancellationToken);
-                        return AddFriendResult.Failed();
                     }
 
                     var rows = await _dbContext.Database.ExecuteSqlInterpolatedAsync(

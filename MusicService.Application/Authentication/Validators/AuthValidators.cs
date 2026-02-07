@@ -51,14 +51,16 @@ namespace MusicService.Application.Authentication.Validators
                 .Matches(PhoneRegex).When(x => !string.IsNullOrWhiteSpace(x.PhoneNumber));
         }
 
-        private Task<bool> BeUniqueEmail(string email, CancellationToken cancellationToken)
+        private async Task<bool> BeUniqueEmail(string email, CancellationToken cancellationToken)
         {
-            return _dbContext.Users.AsNoTracking().AllAsync(u => u.Email != email, cancellationToken);
+            return !await _dbContext.Users.AsNoTracking()
+                .AnyAsync(u => u.Email == email, cancellationToken);
         }
 
-        private Task<bool> BeUniqueUsername(string username, CancellationToken cancellationToken)
+        private async Task<bool> BeUniqueUsername(string username, CancellationToken cancellationToken)
         {
-            return _dbContext.Users.AsNoTracking().AllAsync(u => u.Username != username, cancellationToken);
+            return !await _dbContext.Users.AsNoTracking()
+                .AnyAsync(u => u.Username == username, cancellationToken);
         }
 
         private static bool BeAdult(DateTime? dateOfBirth)

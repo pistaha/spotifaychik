@@ -37,6 +37,8 @@ namespace MusicService.Application.Users.Dtos
         public int FollowingCount { get; set; }
         /// <summary>количество подписчиков</summary>
         public int FollowerCount { get; set; }
+        /// <summary>роли пользователя</summary>
+        public List<string> Roles { get; set; } = new();
     }
 
     public class CreateUserDto

@@ -6,7 +6,11 @@ using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Albums.Queries;
 using MusicService.Application.Common;
 using MusicService.Application.Common.Dtos;
+using MusicService.Application.Common.Interfaces;
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using MusicService.API.Models;
+using MusicService.Domain.Entities;
 
 namespace MusicService.API.Controllers
 {
@@ -15,10 +19,12 @@ namespace MusicService.API.Controllers
     public class AlbumsController : ControllerBase
     {
         private readonly IMediator _mediator;
+        private readonly IMusicServiceDbContext _dbContext;
 
-        public AlbumsController(IMediator mediator)
+        public AlbumsController(IMediator mediator, IMusicServiceDbContext dbContext)
         {
             _mediator = mediator;
+            _dbContext = dbContext;
         }
 
         [HttpGet("{id:guid}")]
@@ -30,12 +36,16 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<AlbumDto>.ErrorResult("Invalid user"));
             }
 
-            var query = new GetAlbumByIdQuery { AlbumId = id, UserId = IsPrivileged() ? null : userId };
+            var query = new GetAlbumByIdQuery
+            {
+                AlbumId = id,
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
+            };
             var result = await _mediator.Send(query, cancellationToken);
             
             if (result == null)
@@ -105,7 +115,7 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<List<AlbumDto>>.ErrorResult("Invalid user"));
             }
@@ -113,7 +123,7 @@ namespace MusicService.API.Controllers
             var query = new GetAlbumsByArtistQuery
             {
                 ArtistId = artistId,
-                UserId = IsPrivileged() ? null : userId
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
             };
             var result = await _mediator.Send(query, cancellationToken);
             return Ok(ApiResponse<List<AlbumDto>>.SuccessResult(result, "Artist albums retrieved successfully"));
@@ -127,7 +137,7 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<List<AlbumDto>>.ErrorResult("Invalid user"));
             }
@@ -135,7 +145,7 @@ namespace MusicService.API.Controllers
             var query = new GetRecentAlbumsQuery
             {
                 Days = days,
-                UserId = IsPrivileged() ? null : userId
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
             };
             var result = await _mediator.Send(query, cancellationToken);
             return Ok(ApiResponse<List<AlbumDto>>.SuccessResult(result, "Recent albums retrieved successfully"));
@@ -154,7 +164,7 @@ namespace MusicService.API.Controllers
             CancellationToken cancellationToken = default)
         {
             var userId = GetUserId();
-            if (!IsPrivileged() && !userId.HasValue)
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && !userId.HasValue)
             {
                 return Unauthorized(ApiResponse<PagedResult<AlbumDto>>.ErrorResult("Invalid user"));
             }
@@ -167,10 +177,166 @@ namespace MusicService.API.Controllers
                 Genre = genre,
                 SortBy = sortBy,
                 SortOrder = sortOrder,
-                UserId = IsPrivileged() ? null : userId
+                UserId = (User.IsInRole("Admin") || User.IsInRole("Moderator")) ? null : userId
             };
             var result = await _mediator.Send(query, cancellationToken);
             return Ok(ApiResponse<PagedResult<AlbumDto>>.SuccessResult(result, "Albums retrieved successfully"));
+        }
+
+        [HttpGet("{id:guid}/images")]
+        [Authorize]
+        [ProducesResponseType(typeof(ApiResponse<List<AlbumImageDto>>), 200)]
+        public async Task<ActionResult<ApiResponse<List<AlbumImageDto>>>> GetAlbumImages(
+            Guid id,
+            CancellationToken cancellationToken = default)
+        {
+            var album = await _dbContext.Albums
+                .AsNoTracking()
+                .Include(a => a.Images)
+                    .ThenInclude(ai => ai.File)
+                .FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+
+            if (album == null)
+            {
+                return NotFound(ApiResponse<List<AlbumImageDto>>.ErrorResult("Album not found"));
+            }
+
+            if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && album.CreatedById != GetUserId())
+            {
+                return Forbid();
+            }
+
+            var result = album.Images
+                .OrderBy(ai => ai.Order)
+                .Select(ai => new AlbumImageDto
+                {
+                    FileId = ai.FileId,
+                    IsMain = ai.IsMain,
+                    Order = ai.Order,
+                    FileUrl = Url.Action("DownloadFile", "Files", new { id = ai.FileId }) ?? $"/api/files/{ai.FileId}",
+                    ThumbnailUrl = Url.Action("Thumbnail", "Files", new { id = ai.FileId, size = "small" }),
+                    FileSize = ai.File?.Size ?? 0,
+                    FileType = ai.File?.ContentType ?? string.Empty
+                })
+                .ToList();
+
+            return Ok(ApiResponse<List<AlbumImageDto>>.SuccessResult(result, "Album images retrieved"));
+        }
+
+        [HttpPost("{id:guid}/images")]
+        [Authorize(Roles = "Admin,Moderator")]
+        [ProducesResponseType(typeof(ApiResponse<List<AlbumImageDto>>), 200)]
+        public async Task<ActionResult<ApiResponse<List<AlbumImageDto>>>> AddAlbumImages(
+            Guid id,
+            [FromBody] List<AlbumImageRequest> images,
+            CancellationToken cancellationToken = default)
+        {
+            if (images == null || images.Count == 0)
+            {
+                return BadRequest(ApiResponse<List<AlbumImageDto>>.ErrorResult("Images are required"));
+            }
+
+            var album = await _dbContext.Albums.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
+            if (album == null)
+            {
+                return NotFound(ApiResponse<List<AlbumImageDto>>.ErrorResult("Album not found"));
+            }
+
+            var fileIds = images.Select(i => i.FileId).ToList();
+            var files = await _dbContext.FileMetadatas
+                .Where(f => fileIds.Contains(f.Id))
+                .ToListAsync(cancellationToken);
+
+            if (files.Count != fileIds.Count)
+            {
+                return BadRequest(ApiResponse<List<AlbumImageDto>>.ErrorResult("Some files were not found"));
+            }
+
+            var currentUserId = GetUserId();
+            foreach (var file in files)
+            {
+                if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(ApiResponse<List<AlbumImageDto>>.ErrorResult("Only images are allowed"));
+                }
+
+                if (!(User.IsInRole("Admin") || User.IsInRole("Moderator")) && file.UploadedBy != currentUserId)
+                {
+                    return Forbid();
+                }
+            }
+
+            foreach (var request in images)
+            {
+                var exists = await _dbContext.AlbumImages.AnyAsync(ai => ai.AlbumId == id && ai.FileId == request.FileId, cancellationToken);
+                if (exists)
+                {
+                    continue;
+                }
+
+                _dbContext.AlbumImages.Add(new AlbumImage
+                {
+                    AlbumId = id,
+                    FileId = request.FileId,
+                    IsMain = request.IsMain,
+                    Order = request.Order,
+                    AttachedAt = DateTime.UtcNow
+                });
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var albumImages = await _dbContext.AlbumImages
+                .AsNoTracking()
+                .Include(ai => ai.File)
+                .Where(ai => ai.AlbumId == id)
+                .OrderBy(ai => ai.Order)
+                .ToListAsync(cancellationToken);
+
+            var result = albumImages
+                .Select(ai => new AlbumImageDto
+                {
+                    FileId = ai.FileId,
+                    IsMain = ai.IsMain,
+                    Order = ai.Order,
+                    FileUrl = Url.Action("DownloadFile", "Files", new { id = ai.FileId }) ?? $"/api/files/{ai.FileId}",
+                    ThumbnailUrl = Url.Action("Thumbnail", "Files", new { id = ai.FileId, size = "small" }),
+                    FileSize = ai.File?.Size ?? 0,
+                    FileType = ai.File?.ContentType ?? string.Empty
+                })
+                .ToList();
+
+            return Ok(ApiResponse<List<AlbumImageDto>>.SuccessResult(result, "Album images updated"));
+        }
+
+        [HttpDelete("{id:guid}/images/{fileId:guid}")]
+        [Authorize(Roles = "Admin,Moderator")]
+        public async Task<ActionResult<ApiResponse<bool>>> RemoveAlbumImage(
+            Guid id,
+            Guid fileId,
+            [FromQuery] bool deleteFile = false,
+            CancellationToken cancellationToken = default)
+        {
+            var image = await _dbContext.AlbumImages.FirstOrDefaultAsync(ai => ai.AlbumId == id && ai.FileId == fileId, cancellationToken);
+            if (image == null)
+            {
+                return NotFound(ApiResponse<bool>.ErrorResult("Image not found"));
+            }
+
+            _dbContext.AlbumImages.Remove(image);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            if (deleteFile)
+            {
+                var file = await _dbContext.FileMetadatas.FirstOrDefaultAsync(f => f.Id == fileId, cancellationToken);
+                if (file != null)
+                {
+                    _dbContext.FileMetadatas.Remove(file);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            return Ok(ApiResponse<bool>.SuccessResult(true, "Image removed"));
         }
 
         private Guid? GetUserId()
@@ -179,9 +345,5 @@ namespace MusicService.API.Controllers
             return Guid.TryParse(userId, out var id) ? id : null;
         }
 
-        private bool IsPrivileged()
-        {
-            return User.IsInRole("Admin") || User.IsInRole("Moderator");
-        }
     }
 }
