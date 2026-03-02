@@ -30,7 +30,13 @@ namespace MusicService.Application.Tracks.Queries
                 .Where(t => t.AlbumId == request.AlbumId)
                 .Include(t => t.Album)
                 .Include(t => t.Artist)
-                .AsSplitQuery();
+                .AsSplitQuery()
+                .AsQueryable();
+
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(t => t.CreatedById == request.UserId.Value);
+            }
             
             if (request.SortByTrackNumber)
             {

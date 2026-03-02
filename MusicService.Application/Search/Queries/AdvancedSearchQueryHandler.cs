@@ -36,11 +36,12 @@ namespace MusicService.Application.Search.Queries
             {
                 if (!string.IsNullOrEmpty(searchTerm))
                 {
-                    await ProcessArtistsAsync(allResults, searchTerm, cancellationToken);
-                    await ProcessAlbumsAsync(allResults, searchTerm, cancellationToken);
-                    await ProcessTracksAsync(allResults, searchTerm, cancellationToken);
-                    await ProcessPlaylistsAsync(allResults, searchTerm, cancellationToken);
-                    await ProcessUsersAsync(allResults, searchTerm, cancellationToken);
+                    var candidateLimit = Math.Max(50, request.Request.PageSize * request.Request.PageNumber);
+                    await ProcessArtistsAsync(allResults, searchTerm, candidateLimit, cancellationToken);
+                    await ProcessAlbumsAsync(allResults, searchTerm, candidateLimit, cancellationToken);
+                    await ProcessTracksAsync(allResults, searchTerm, candidateLimit, cancellationToken);
+                    await ProcessPlaylistsAsync(allResults, searchTerm, candidateLimit, cancellationToken);
+                    await ProcessUsersAsync(allResults, searchTerm, candidateLimit, cancellationToken);
                 }
 
                 ApplyFilters(ref allResults, request.Request);
@@ -66,12 +67,14 @@ namespace MusicService.Application.Search.Queries
             }
         }
 
-        private async Task ProcessArtistsAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
+        private async Task ProcessArtistsAsync(List<AdvancedSearchResultDto> results, string searchTerm, int candidateLimit, CancellationToken cancellationToken)
         {
             var artists = await _dbContext.Artists
                 .AsNoTracking()
                 .Where(a => EF.Functions.ILike(a.Name, $"%{searchTerm}%") ||
                             a.Genres.Any(g => EF.Functions.ILike(g, $"%{searchTerm}%")))
+                .OrderByDescending(a => a.CreatedAt)
+                .Take(candidateLimit)
                 .ToListAsync(cancellationToken);
 
             foreach (var artist in artists)
@@ -95,12 +98,14 @@ namespace MusicService.Application.Search.Queries
             }
         }
 
-        private async Task ProcessAlbumsAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
+        private async Task ProcessAlbumsAsync(List<AdvancedSearchResultDto> results, string searchTerm, int candidateLimit, CancellationToken cancellationToken)
         {
             var albums = await _dbContext.Albums
                 .AsNoTracking()
                 .Where(a => EF.Functions.ILike(a.Title, $"%{searchTerm}%") ||
                             a.Genres.Any(g => EF.Functions.ILike(g, $"%{searchTerm}%")))
+                .OrderByDescending(a => a.CreatedAt)
+                .Take(candidateLimit)
                 .Select(a => new
                 {
                     Album = a,
@@ -131,11 +136,13 @@ namespace MusicService.Application.Search.Queries
             }
         }
 
-        private async Task ProcessTracksAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
+        private async Task ProcessTracksAsync(List<AdvancedSearchResultDto> results, string searchTerm, int candidateLimit, CancellationToken cancellationToken)
         {
             var tracks = await _dbContext.Tracks
                 .AsNoTracking()
                 .Where(t => EF.Functions.ILike(t.Title, $"%{searchTerm}%"))
+                .OrderByDescending(t => t.CreatedAt)
+                .Take(candidateLimit)
                 .Select(t => new
                 {
                     Track = t,
@@ -165,11 +172,13 @@ namespace MusicService.Application.Search.Queries
             }
         }
 
-        private async Task ProcessPlaylistsAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
+        private async Task ProcessPlaylistsAsync(List<AdvancedSearchResultDto> results, string searchTerm, int candidateLimit, CancellationToken cancellationToken)
         {
             var playlists = await _dbContext.Playlists
                 .AsNoTracking()
                 .Where(p => EF.Functions.ILike(p.Title, $"%{searchTerm}%"))
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(candidateLimit)
                 .Select(p => new
                 {
                     Playlist = p,
@@ -200,12 +209,15 @@ namespace MusicService.Application.Search.Queries
             }
         }
 
-        private async Task ProcessUsersAsync(List<AdvancedSearchResultDto> results, string searchTerm, CancellationToken cancellationToken)
+        private async Task ProcessUsersAsync(List<AdvancedSearchResultDto> results, string searchTerm, int candidateLimit, CancellationToken cancellationToken)
         {
             var users = await _dbContext.Users
                 .AsNoTracking()
-                .Where(u => EF.Functions.ILike(u.Username, $"%{searchTerm}%") ||
-                            (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{searchTerm}%")))
+                .Where(u => !u.IsDeleted &&
+                            (EF.Functions.ILike(u.Username, $"%{searchTerm}%") ||
+                             (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{searchTerm}%"))))
+                .OrderByDescending(u => u.CreatedAt)
+                .Take(candidateLimit)
                 .ToListAsync(cancellationToken);
 
             foreach (var user in users)

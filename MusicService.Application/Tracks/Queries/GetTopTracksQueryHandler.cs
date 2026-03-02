@@ -24,6 +24,18 @@ namespace MusicService.Application.Tracks.Queries
         {
             List<TrackDto> topTracks;
 
+            var trackQuery = _dbContext.Tracks
+                .AsNoTracking()
+                .Include(t => t.Album)
+                .Include(t => t.Artist)
+                .AsSplitQuery()
+                .AsQueryable();
+
+            if (request.UserId.HasValue)
+            {
+                trackQuery = trackQuery.Where(t => t.CreatedById == request.UserId.Value);
+            }
+
             if (!string.IsNullOrEmpty(request.TimeRange) && request.TimeRange != "all")
             {
                 var cutoffDate = GetCutoffDate(request.TimeRange);
@@ -34,10 +46,7 @@ namespace MusicService.Application.Tracks.Queries
                     .Select(g => new { TrackId = g.Key, Plays = g.Count() })
                     .OrderByDescending(x => x.Plays)
                     .Take(request.Count)
-                    .Join(_dbContext.Tracks.AsNoTracking()
-                            .Include(t => t.Album)
-                            .Include(t => t.Artist)
-                            .AsSplitQuery(),
+                    .Join(trackQuery,
                         stats => stats.TrackId,
                         track => track.Id,
                         (stats, track) => new
@@ -81,11 +90,7 @@ namespace MusicService.Application.Tracks.Queries
             }
             else
             {
-                var tracks = await _dbContext.Tracks
-                    .AsNoTracking()
-                    .Include(t => t.Album)
-                    .Include(t => t.Artist)
-                    .AsSplitQuery()
+                var tracks = await trackQuery
                     .OrderByDescending(t => t.PlayCount)
                     .Take(request.Count)
                     .ToListAsync(cancellationToken);

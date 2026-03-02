@@ -12,5 +12,6 @@ namespace MusicService.Application.Albums.Queries
         public string? Genre { get; init; }
         public string? SortBy { get; init; }
         public string? SortOrder { get; init; } = "desc";
+        public Guid? UserId { get; init; }
     }
 }

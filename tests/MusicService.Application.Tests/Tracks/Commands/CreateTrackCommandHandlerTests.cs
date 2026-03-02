@@ -1,122 +1,110 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using AutoFixture;
-using AutoMapper;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Moq;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Application.Tracks.Commands;
 using MusicService.Domain.Entities;
+using Tests.EFCoreTests;
 using Xunit;
 
 namespace Tests.MusicService.Application.Tests.Tracks.Commands;
 
 public class CreateTrackCommandHandlerTests
 {
-    private readonly Fixture _fixture;
-
-    public CreateTrackCommandHandlerTests()
-    {
-        _fixture = new Fixture();
-        _fixture.Behaviors.Remove(new ThrowingRecursionBehavior());
-        _fixture.Behaviors.Add(new OmitOnRecursionBehavior());
-    }
-
     [Fact]
     public async Task Handle_ShouldCreateTrackAndReturnDto()
     {
-        var command = _fixture.Build<CreateTrackCommand>()
-            .With(c => c.Title, "Ocean Eyes")
-            .With(c => c.DurationSeconds, 240)
-            .With(c => c.TrackNumber, 3)
-            .With(c => c.IsExplicit, false)
-            .With(c => c.AlbumId, Guid.NewGuid())
-            .With(c => c.ArtistId, Guid.NewGuid())
-            .Create();
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
+        dbContext.Albums.Add(new Album
+        {
+            Id = albumId,
+            ArtistId = artistId,
+            Title = "Album",
+            ReleaseDate = DateTime.UtcNow,
+            Type = AlbumType.Album,
+            Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
 
-        var album = _fixture.Build<Album>()
-            .With(a => a.Id, command.AlbumId)
-            .Create();
-
-        var artist = _fixture.Build<Artist>()
-            .With(a => a.Id, command.ArtistId)
-            .Create();
-
-        var trackRepositoryMock = new Mock<ITrackRepository>();
-        Track? persistedTrack = null;
-        trackRepositoryMock
-            .Setup(r => r.CreateAsync(It.IsAny<Track>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Track track, CancellationToken _) =>
-            {
-                persistedTrack = track;
-                track.Id = Guid.NewGuid();
-                track.CreatedAt = DateTime.UtcNow;
-                track.UpdatedAt = DateTime.UtcNow;
-                return track;
-            });
-
-        var albumRepositoryMock = new Mock<IAlbumRepository>();
-        albumRepositoryMock
-            .Setup(r => r.GetByIdAsync(command.AlbumId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(album);
-
-        var artistRepositoryMock = new Mock<IArtistRepository>();
-        artistRepositoryMock
-            .Setup(r => r.GetByIdAsync(command.ArtistId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(artist);
-
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile(new MappingProfile())).CreateMapper();
-        var loggerMock = new Mock<ILogger<CreateTrackCommandHandler>>();
+        var command = new CreateTrackCommand
+        {
+            Title = "Ocean Eyes",
+            DurationSeconds = 240,
+            TrackNumber = 3,
+            IsExplicit = false,
+            AlbumId = albumId,
+            ArtistId = artistId,
+            CreatedById = creatorId
+        };
         var handler = new CreateTrackCommandHandler(
-            trackRepositoryMock.Object,
-            albumRepositoryMock.Object,
-            artistRepositoryMock.Object,
-            mapper,
-            loggerMock.Object);
+            dbContext,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<CreateTrackCommandHandler>());
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Title.Should().Be(command.Title);
-        result.DurationSeconds.Should().Be(command.DurationSeconds);
-        result.AlbumId.Should().Be(command.AlbumId);
-        result.ArtistId.Should().Be(command.ArtistId);
-        persistedTrack.Should().NotBeNull();
-        persistedTrack!.Title.Should().Be(command.Title);
-        persistedTrack.DurationSeconds.Should().Be(command.DurationSeconds);
-        trackRepositoryMock.Verify(r => r.CreateAsync(It.IsAny<Track>(), It.IsAny<CancellationToken>()), Times.Once);
+        dbContext.Tracks.Should().ContainSingle(t => t.Title == command.Title && t.AlbumId == albumId);
     }
 
     [Fact]
     public async Task Handle_ShouldThrowArgumentException_WhenAlbumNotFound()
     {
-        var command = _fixture.Build<CreateTrackCommand>()
-            .With(c => c.AlbumId, Guid.NewGuid())
-            .With(c => c.ArtistId, Guid.NewGuid())
-            .Create();
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
 
-        var trackRepositoryMock = new Mock<ITrackRepository>();
-        var albumRepositoryMock = new Mock<IAlbumRepository>();
-        albumRepositoryMock
-            .Setup(r => r.GetByIdAsync(command.AlbumId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Album?)null);
-
-        var artistRepositoryMock = new Mock<IArtistRepository>();
-        artistRepositoryMock
-            .Setup(r => r.GetByIdAsync(command.ArtistId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Artist { Id = command.ArtistId });
-
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile(new MappingProfile())).CreateMapper();
-        var loggerMock = new Mock<ILogger<CreateTrackCommandHandler>>();
-
+        var command = new CreateTrackCommand
+        {
+            Title = "No Album",
+            DurationSeconds = 240,
+            TrackNumber = 1,
+            AlbumId = Guid.NewGuid(),
+            ArtistId = artistId,
+            CreatedById = creatorId
+        };
         var handler = new CreateTrackCommandHandler(
-            trackRepositoryMock.Object,
-            albumRepositoryMock.Object,
-            artistRepositoryMock.Object,
-            mapper,
-            loggerMock.Object);
+            dbContext,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<CreateTrackCommandHandler>());
 
         var act = async () => await handler.Handle(command, CancellationToken.None);
 
@@ -127,31 +115,52 @@ public class CreateTrackCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldThrowArgumentException_WhenArtistNotFound()
     {
-        var command = _fixture.Build<CreateTrackCommand>()
-            .With(c => c.AlbumId, Guid.NewGuid())
-            .With(c => c.ArtistId, Guid.NewGuid())
-            .Create();
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
+        dbContext.Albums.Add(new Album
+        {
+            Id = albumId,
+            ArtistId = artistId,
+            Title = "Album",
+            ReleaseDate = DateTime.UtcNow,
+            Type = AlbumType.Album,
+            Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
 
-        var trackRepositoryMock = new Mock<ITrackRepository>();
-        var albumRepositoryMock = new Mock<IAlbumRepository>();
-        albumRepositoryMock
-            .Setup(r => r.GetByIdAsync(command.AlbumId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Album { Id = command.AlbumId });
-
-        var artistRepositoryMock = new Mock<IArtistRepository>();
-        artistRepositoryMock
-            .Setup(r => r.GetByIdAsync(command.ArtistId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Artist?)null);
-
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile(new MappingProfile())).CreateMapper();
-        var loggerMock = new Mock<ILogger<CreateTrackCommandHandler>>();
-
+        var command = new CreateTrackCommand
+        {
+            Title = "No Artist",
+            DurationSeconds = 240,
+            TrackNumber = 1,
+            AlbumId = albumId,
+            ArtistId = Guid.NewGuid(),
+            CreatedById = creatorId
+        };
         var handler = new CreateTrackCommandHandler(
-            trackRepositoryMock.Object,
-            albumRepositoryMock.Object,
-            artistRepositoryMock.Object,
-            mapper,
-            loggerMock.Object);
+            dbContext,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<CreateTrackCommandHandler>());
 
         var act = async () => await handler.Handle(command, CancellationToken.None);
 

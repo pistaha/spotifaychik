@@ -38,11 +38,12 @@ namespace Tests.EFCoreTests
                 Country = "US"
             };
 
+            var initialCount = await dbContext.Users.CountAsync();
             var result = await handler.Handle(command, CancellationToken.None);
 
             result.Should().NotBeNull();
             result.Username.Should().Be("demo_user");
-            (await dbContext.Users.CountAsync()).Should().Be(1);
+            (await dbContext.Users.CountAsync()).Should().Be(initialCount + 1);
         }
 
         [Fact]

@@ -1,13 +1,24 @@
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MusicService.API.Authentication;
+using MusicService.API.Authorization;
+using MusicService.API.Files;
 using MusicService.Infrastructure.Persistence;
+using System;
 using System.Reflection;
+using System.Text;
 
 namespace MusicService.API.Configuration
 {
     public static class ApiDependencyInjection
     {
-        public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment env)
         {
             // Контроллеры с настройкой JSON
             services.AddControllers()
@@ -73,6 +84,14 @@ namespace MusicService.API.Configuration
                     c.IncludeXmlComments(xmlPath);
                 }
 
+                c.MapType<IFormFile>(() => new OpenApiSchema
+                {
+                    Type = "string",
+                    Format = "binary"
+                });
+
+                c.OperationFilter<FileUploadUiOperationFilter>();
+
                 // Добавляем поддержка авторизации в Swagger
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
@@ -80,7 +99,8 @@ namespace MusicService.API.Configuration
                     Name = "Authorization",
                     In = ParameterLocation.Header,
                     Type = SecuritySchemeType.Http,
-                    Scheme = "bearer"
+                    Scheme = "bearer",
+                    BearerFormat = "JWT"
                 });
 
                 c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -127,6 +147,7 @@ namespace MusicService.API.Configuration
 
                     return true;
                 });
+
             });
 
             // CORS
@@ -145,8 +166,8 @@ namespace MusicService.API.Configuration
                             "https://musicservice.com",
                             "https://www.musicservice.com",
                             "https://api.musicservice.com")
-                          .AllowAnyMethod()
-                          .AllowAnyHeader()
+                          .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH")
+                          .WithHeaders("Authorization", "Content-Type")
                           .AllowCredentials();
                 });
             });
@@ -154,6 +175,91 @@ namespace MusicService.API.Configuration
             // Health Checks
             services.AddHealthChecks()
                 .AddDbContextCheck<MusicServiceDbContext>("database");
+
+            services.Configure<FileStorageOptions>(configuration.GetSection("FileStorage"));
+            services.AddSingleton<FileValidationService>();
+            services.AddSingleton<ImageProcessingService>();
+
+            services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = configuration.GetValue<long>("FileStorage:MaxTotalUploadBytes", 104_857_600);
+            });
+
+            // Authentication & Authorization (JWT)
+            var jwtSection = configuration.GetSection("JwtSettings");
+            var jwtIssuer = jwtSection["Issuer"];
+            var jwtAudience = jwtSection["Audience"];
+            var jwtSecret = jwtSection["Secret"];
+            var jwtConfigured = !string.IsNullOrWhiteSpace(jwtIssuer) &&
+                                !string.IsNullOrWhiteSpace(jwtAudience) &&
+                                !string.IsNullOrWhiteSpace(jwtSecret);
+
+            if (jwtConfigured)
+            {
+                services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                    .AddJwtBearer(options =>
+                    {
+                        options.RequireHttpsMetadata = true;
+                        options.TokenValidationParameters = new TokenValidationParameters
+                        {
+                            ValidateIssuer = true,
+                            ValidateAudience = true,
+                            ValidateLifetime = true,
+                            ValidateIssuerSigningKey = true,
+                            ValidIssuer = jwtIssuer,
+                            ValidAudience = jwtAudience,
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret ?? throw new InvalidOperationException("JwtSettings:Secret is not configured."))),
+                            ClockSkew = TimeSpan.FromMinutes(2)
+                        };
+                    });
+
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
+                options.AddPolicy("RequireModeratorOrAdmin", policy => policy.RequireRole("Admin", "Moderator"));
+                options.AddPolicy("RequireEmailConfirmed", policy => policy.RequireClaim("EmailConfirmed", "true"));
+                options.AddPolicy("RequirePremiumSubscription", policy => policy.RequireClaim("SubscriptionLevel", "Premium", "Enterprise"));
+                options.AddPolicy("RequireMinimumAge", policy => policy.Requirements.Add(new MinimumAgeRequirement(18)));
+                options.AddPolicy("CanEditPost", policy => policy.Requirements.Add(new PermissionRequirement("CanEditPost")));
+                options.AddPolicy("CanDeleteTracks", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteTracks")));
+                options.AddPolicy("CanEditMetadata", policy => policy.Requirements.Add(new PermissionRequirement("CanEditMetadata")));
+                options.AddPolicy("CanViewAuditLogs", policy => policy.Requirements.Add(new PermissionRequirement("CanViewAuditLogs")));
+                options.AddPolicy("CanViewReports", policy => policy.Requirements.Add(new PermissionRequirement("CanViewReports")));
+                options.AddPolicy("CanDeleteUser", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteUser")));
+                options.AddPolicy("CanManageUsers", policy => policy.RequireRole("Admin"));
+            });
+            }
+            else if ((env.IsDevelopment() || env.IsEnvironment("Test") || env.IsEnvironment("Testing")) &&
+                     configuration.GetValue<bool>("Auth:EnableDevelopmentAuth"))
+            {
+                services.AddAuthentication("Development")
+                    .AddScheme<AuthenticationSchemeOptions, DevelopmentAuthHandler>("Development", _ => { });
+                services.AddAuthorization(options =>
+                {
+                    options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
+                    options.AddPolicy("RequireModeratorOrAdmin", policy => policy.RequireRole("Admin", "Moderator"));
+                    options.AddPolicy("RequireEmailConfirmed", policy => policy.RequireClaim("EmailConfirmed", "true"));
+                    options.AddPolicy("RequirePremiumSubscription", policy => policy.RequireClaim("SubscriptionLevel", "Premium", "Enterprise"));
+                    options.AddPolicy("RequireMinimumAge", policy => policy.Requirements.Add(new MinimumAgeRequirement(18)));
+                    options.AddPolicy("CanEditPost", policy => policy.Requirements.Add(new PermissionRequirement("CanEditPost")));
+                    options.AddPolicy("CanDeleteTracks", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteTracks")));
+                    options.AddPolicy("CanEditMetadata", policy => policy.Requirements.Add(new PermissionRequirement("CanEditMetadata")));
+                    options.AddPolicy("CanViewAuditLogs", policy => policy.Requirements.Add(new PermissionRequirement("CanViewAuditLogs")));
+                    options.AddPolicy("CanViewReports", policy => policy.Requirements.Add(new PermissionRequirement("CanViewReports")));
+                    options.AddPolicy("CanDeleteUser", policy => policy.Requirements.Add(new PermissionRequirement("CanDeleteUser")));
+                    options.AddPolicy("CanManageUsers", policy => policy.RequireRole("Admin"));
+                });
+            }
+            else
+            {
+                throw new InvalidOperationException("Jwt settings are not configured.");
+            }
+
+            services.Configure<JwtSettings>(jwtSection);
+            services.AddSingleton<IJwtTokenService, JwtTokenService>();
+            services.AddScoped<IAuthorizationHandler, MinimumAgeAuthorizationHandler>();
+            services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+            services.AddScoped<IAuthorizationHandler, ResourceOwnerAuthorizationHandler>();
 
             // Response Compression
             services.AddResponseCompression(options =>
@@ -196,6 +302,7 @@ namespace MusicService.API.Configuration
             // Health Checks
             app.UseHealthChecks("/health");
             
+            app.UseAuthentication();
             app.UseAuthorization();
             app.UseEndpoints(endpoints =>
             {

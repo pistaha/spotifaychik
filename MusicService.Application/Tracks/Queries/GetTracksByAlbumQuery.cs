@@ -9,5 +9,6 @@ namespace MusicService.Application.Tracks.Queries
     {
         public Guid AlbumId { get; init; }
         public bool SortByTrackNumber { get; init; } = true;
+        public Guid? UserId { get; init; }
     }
 }

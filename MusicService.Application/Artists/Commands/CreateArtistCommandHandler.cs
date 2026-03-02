@@ -1,9 +1,14 @@
 using AutoMapper;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using MusicService.Application.Artists.Dtos;
-using MusicService.Domain.Entities;
+using MusicService.Application.Common;
 using MusicService.Application.Common.Interfaces;
+using MusicService.Domain.Entities;
+using System;
+using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,26 +34,101 @@ namespace MusicService.Application.Artists.Commands
         {
             _logger.LogInformation("Creating artist: {Name}", request.Name);
 
-            var artist = new Artist
+            var maxAttempts = 3;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                Name = request.Name,
-                RealName = request.RealName,
-                Biography = request.Biography,
-                ProfileImage = request.ProfileImage,
-                CoverImage = request.CoverImage,
-                Genres = request.Genres,
-                Country = request.Country,
-                CareerStartDate = request.CareerStartDate,
-                IsVerified = false,
-                MonthlyListeners = 0
-            };
+                IDbContextTransaction? transaction = null;
+                try
+                {
+                    var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                    if (!isInMemory)
+                    {
+                        transaction = await _dbContext.Database.BeginTransactionAsync(
+                            IsolationLevel.Serializable, cancellationToken);
+                    }
 
-            _dbContext.Artists.Add(artist);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            
-            _logger.LogInformation("Artist {ArtistId} created successfully", artist.Id);
-            
-            return _mapper.Map<ArtistDto>(artist);
+                    var creatorExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Id == request.CreatedById, cancellationToken);
+                    if (!creatorExists)
+                        throw new ArgumentException($"User with ID {request.CreatedById} not found");
+
+                    var artist = new Artist
+                    {
+                        Name = request.Name,
+                        RealName = request.RealName,
+                        Biography = request.Biography,
+                        ProfileImage = request.ProfileImage,
+                        CoverImage = request.CoverImage,
+                        Genres = request.Genres,
+                        Country = request.Country,
+                        CareerStartDate = request.CareerStartDate,
+                        IsVerified = false,
+                        MonthlyListeners = 0,
+                        CreatedById = request.CreatedById
+                    };
+
+                    _dbContext.Artists.Add(artist);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    if (transaction != null)
+                    {
+                        await transaction.CommitAsync(cancellationToken);
+                    }
+
+                    _logger.LogInformation("Artist {ArtistId} created successfully", artist.Id);
+                    return _mapper.Map<ArtistDto>(artist);
+                }
+                catch (DbUpdateException ex)
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
+
+                    if (DatabaseErrorDetector.IsUniqueViolation(ex))
+                    {
+                        throw new ArgumentException("Artist with the same name already exists");
+                    }
+
+                    if (DatabaseErrorDetector.IsTransient(ex) && attempt < maxAttempts)
+                    {
+                        await DelayAsync(attempt, cancellationToken);
+                        continue;
+                    }
+
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
+
+                    if (DatabaseErrorDetector.IsTransient(ex) && attempt < maxAttempts)
+                    {
+                        await DelayAsync(attempt, cancellationToken);
+                        continue;
+                    }
+
+                    throw;
+                }
+                finally
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.DisposeAsync();
+                    }
+                }
+            }
+
+            throw new InvalidOperationException("Failed to create artist after multiple attempts.");
+        }
+
+        private static Task DelayAsync(int attempt, CancellationToken cancellationToken)
+        {
+            var delayMs = 50 * (int)Math.Pow(2, attempt - 1);
+            return Task.Delay(delayMs, cancellationToken);
         }
     }
 }

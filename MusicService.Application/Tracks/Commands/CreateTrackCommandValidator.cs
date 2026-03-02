@@ -22,6 +22,9 @@ namespace MusicService.Application.Tracks.Commands
 
             RuleFor(x => x.ArtistId)
                 .NotEmpty().WithMessage("Artist ID is required");
+
+            RuleFor(x => x.CreatedById)
+                .NotEmpty().WithMessage("CreatedBy ID is required");
         }
     }
 }

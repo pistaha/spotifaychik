@@ -11,11 +11,11 @@ public class PasswordHasherTests
     {
         var hasher = new BcryptPasswordHasher();
 
-        var hashed = hasher.HashPassword("secret");
+        var hashed = hasher.HashPassword("secret", out _);
 
         hashed.Should().NotBeNullOrWhiteSpace();
         hashed.Should().NotBe("secret");
-        BCrypt.Net.BCrypt.Verify("secret", hashed).Should().BeTrue();
+        hasher.Verify("secret", hashed).Should().BeTrue();
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class PasswordHasherTests
     {
         var hasher = new BcryptPasswordHasher();
 
-        Action act = () => hasher.HashPassword("");
+        Action act = () => hasher.HashPassword("", out _);
 
         act.Should().Throw<ArgumentException>();
     }

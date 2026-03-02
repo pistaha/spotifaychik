@@ -15,6 +15,9 @@ namespace MusicService.Application.Artists.Commands
 
             RuleFor(x => x.Country)
                 .NotEmpty().WithMessage("Country is required");
+
+            RuleFor(x => x.CreatedById)
+                .NotEmpty().WithMessage("CreatedBy ID is required");
         }
     }
 }

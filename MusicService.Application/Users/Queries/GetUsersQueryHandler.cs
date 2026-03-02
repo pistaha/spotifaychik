@@ -22,15 +22,28 @@ namespace MusicService.Application.Users.Queries
 
         public async Task<PagedResult<UserDto>> Handle(GetUsersQuery request, CancellationToken cancellationToken)
         {
-            IQueryable<Domain.Entities.User> query = _dbContext.Users.AsNoTracking();
+            IQueryable<Domain.Entities.User> query = _dbContext.Users.AsNoTracking()
+                .Where(u => !u.IsDeleted);
 
             if (!string.IsNullOrWhiteSpace(request.Search))
             {
                 var search = request.Search.Trim();
-                query = query.Where(u =>
-                    EF.Functions.ILike(u.Username, $"%{search}%") ||
-                    (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{search}%")) ||
-                    EF.Functions.ILike(u.Email, $"%{search}%"));
+                var isPostgres = _dbContext.Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL";
+                if (isPostgres)
+                {
+                    query = query.Where(u =>
+                        EF.Functions.ILike(u.Username, $"%{search}%") ||
+                        (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{search}%")) ||
+                        EF.Functions.ILike(u.Email, $"%{search}%"));
+                }
+                else
+                {
+                    var searchLower = search.ToLowerInvariant();
+                    query = query.Where(u =>
+                        EF.Functions.Like(u.Username.ToLower(), $"%{searchLower}%") ||
+                        (u.DisplayName != null && EF.Functions.Like(u.DisplayName.ToLower(), $"%{searchLower}%")) ||
+                        EF.Functions.Like(u.Email.ToLower(), $"%{searchLower}%"));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(request.Country))
@@ -52,12 +65,17 @@ namespace MusicService.Application.Users.Queries
                     UpdatedAt = u.UpdatedAt,
                     Username = u.Username,
                     Email = u.Email,
+                    FirstName = u.FirstName,
+                    LastName = u.LastName,
                     DisplayName = u.DisplayName,
                     ProfileImage = u.ProfileImage,
+                    PhoneNumber = u.PhoneNumber,
                     Country = u.Country,
                     FavoriteGenres = u.FavoriteGenres,
                     ListenTimeMinutes = u.ListenTimeMinutes,
-                    LastLogin = u.LastLogin,
+                    LastLoginAt = u.LastLoginAt,
+                    IsEmailConfirmed = u.IsEmailConfirmed,
+                    IsActive = u.IsActive,
                     PlaylistCount = u.CreatedPlaylists.Count,
                     FollowingCount = u.FollowedArtists.Count + u.FollowedPlaylists.Count,
                     FollowerCount = u.Friends.Count

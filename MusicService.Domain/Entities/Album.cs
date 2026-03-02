@@ -18,8 +18,11 @@ namespace MusicService.Domain.Entities
         // Связи
         public Guid ArtistId { get; set; }
         public Artist? Artist { get; set; }
+        public Guid? CreatedById { get; set; }
+        public User? CreatedBy { get; set; }
         public List<Track> Tracks { get; set; } = new();
         public List<User> AddedByUsers { get; set; } = new();
+        public List<AlbumImage> Images { get; set; } = new();
 
         public bool IsRecentRelease()
         {

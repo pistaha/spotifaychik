@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
+using MusicService.Application.Common;
 using MusicService.Application.Common.Interfaces;
 using MusicService.Application.Users.Dtos;
 using MusicService.Domain.Entities;
@@ -36,76 +37,139 @@ namespace MusicService.Application.Users.Commands
         {
             _logger.LogInformation("Creating user: {Username}", request.Username);
 
-            IDbContextTransaction? transaction = null;
-            try
+            var maxAttempts = 3;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
-                if (!isInMemory)
+                IDbContextTransaction? transaction = null;
+                try
                 {
-                    transaction = await _dbContext.Database.BeginTransactionAsync(
-                        IsolationLevel.Serializable, cancellationToken);
+                    var isInMemory = _dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+                    if (!isInMemory)
+                    {
+                        transaction = await _dbContext.Database.BeginTransactionAsync(
+                            IsolationLevel.Serializable, cancellationToken);
+                    }
+
+                    var emailExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Email == request.Email, cancellationToken);
+                    if (emailExists)
+                        throw new ArgumentException($"User with email {request.Email} already exists");
+
+                    var usernameExists = await _dbContext.Users
+                        .AsNoTracking()
+                        .AnyAsync(u => u.Username == request.Username, cancellationToken);
+                    if (usernameExists)
+                        throw new ArgumentException($"User with username {request.Username} already exists");
+
+                    var displayName = string.IsNullOrWhiteSpace(request.DisplayName)
+                        ? $"{request.FirstName} {request.LastName}".Trim()
+                        : request.DisplayName;
+                    if (string.IsNullOrWhiteSpace(displayName))
+                    {
+                        displayName = request.Username;
+                    }
+
+                    var hash = _passwordHasher.HashPassword(request.Password, out var salt);
+
+                    var user = new User
+                    {
+                        Username = request.Username,
+                        Email = request.Email,
+                        PasswordHash = hash,
+                        PasswordSalt = salt,
+                        FirstName = request.FirstName,
+                        LastName = request.LastName,
+                        DisplayName = displayName,
+                        DateOfBirth = request.DateOfBirth,
+                        Country = request.Country,
+                        PhoneNumber = request.PhoneNumber,
+                        FavoriteGenres = request.FavoriteGenres,
+                        LastLoginAt = null,
+                        ListenTimeMinutes = 0,
+                        IsActive = true,
+                        IsEmailConfirmed = false,
+                        IsDeleted = false
+                    };
+
+                    var userRoleId = await _dbContext.Roles
+                        .AsNoTracking()
+                        .Where(r => r.Name == "User")
+                        .Select(r => (Guid?)r.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (userRoleId.HasValue)
+                    {
+                        _dbContext.UserRoles.Add(new UserRole
+                        {
+                            UserId = user.Id,
+                            RoleId = userRoleId.Value,
+                            AssignedAt = DateTime.UtcNow
+                        });
+                    }
+
+                    _dbContext.Users.Add(user);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    if (transaction != null)
+                    {
+                        await transaction.CommitAsync(cancellationToken);
+                    }
+
+                    _logger.LogInformation("User {UserId} created successfully", user.Id);
+
+                    return _mapper.Map<UserDto>(user);
                 }
-
-                var emailExists = await _dbContext.Users
-                    .AsNoTracking()
-                    .AnyAsync(u => u.Email == request.Email, cancellationToken);
-                if (emailExists)
-                    throw new ArgumentException($"User with email {request.Email} already exists");
-
-                var usernameExists = await _dbContext.Users
-                    .AsNoTracking()
-                    .AnyAsync(u => u.Username == request.Username, cancellationToken);
-                if (usernameExists)
-                    throw new ArgumentException($"User with username {request.Username} already exists");
-
-                var user = new User
+                catch (DbUpdateException ex)
                 {
-                    Username = request.Username,
-                    Email = request.Email,
-                    PasswordHash = _passwordHasher.HashPassword(request.Password),
-                    DisplayName = request.DisplayName,
-                    DateOfBirth = request.DateOfBirth,
-                    Country = request.Country,
-                    FavoriteGenres = request.FavoriteGenres,
-                    LastLogin = DateTime.UtcNow,
-                    ListenTimeMinutes = 0
-                };
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
 
-                _dbContext.Users.Add(user);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                if (transaction != null)
-                {
-                    await transaction.CommitAsync(cancellationToken);
+                    if (DatabaseErrorDetector.IsUniqueViolation(ex))
+                    {
+                        _logger.LogWarning(ex, "Unique constraint violation while creating user {Username}", request.Username);
+                        throw new ArgumentException("User with the same email or username already exists");
+                    }
+
+                    if (DatabaseErrorDetector.IsTransient(ex) && attempt < maxAttempts)
+                    {
+                        await DelayAsync(attempt, cancellationToken);
+                        continue;
+                    }
+
+                    throw;
                 }
+                catch (Exception ex)
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                    }
 
-                _logger.LogInformation("User {UserId} created successfully", user.Id);
+                    if (DatabaseErrorDetector.IsTransient(ex) && attempt < maxAttempts)
+                    {
+                        await DelayAsync(attempt, cancellationToken);
+                        continue;
+                    }
 
-                return _mapper.Map<UserDto>(user);
+                    throw;
+                }
+                finally
+                {
+                    if (transaction != null)
+                    {
+                        await transaction.DisposeAsync();
+                    }
+                }
             }
-            catch (DbUpdateException ex)
-            {
-                if (transaction != null)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                }
-                _logger.LogWarning(ex, "Unique constraint violation while creating user {Username}", request.Username);
-                throw new ArgumentException("User with the same email or username already exists");
-            }
-            catch
-            {
-                if (transaction != null)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                }
-                throw;
-            }
-            finally
-            {
-                if (transaction != null)
-                {
-                    await transaction.DisposeAsync();
-                }
-            }
+
+            throw new InvalidOperationException("Failed to create user after multiple attempts.");
+        }
+
+        private static Task DelayAsync(int attempt, CancellationToken cancellationToken)
+        {
+            var delayMs = 50 * (int)Math.Pow(2, attempt - 1);
+            return Task.Delay(delayMs, cancellationToken);
         }
     }
 }

@@ -1,50 +1,30 @@
 using FluentValidation;
-using Microsoft.EntityFrameworkCore;
-using MusicService.Application.Common.Interfaces;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace MusicService.Application.Users.Commands
 {
     public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
     {
-        private readonly IMusicServiceDbContext _dbContext;
-
-        public CreateUserCommandValidator(IMusicServiceDbContext dbContext)
+        private const string PasswordRuleMessage = "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a digit, and a special character";
+        public CreateUserCommandValidator()
         {
-            _dbContext = dbContext;
-
             RuleFor(x => x.Username)
                 .NotEmpty().WithMessage("Username is required")
-                .Length(3, 50).WithMessage("Username must be between 3 and 50 characters")
-                .MustAsync(BeUniqueUsername).WithMessage("Username already exists");
+                .Matches(@"^[a-zA-Z0-9_]{3,50}$").WithMessage("Username can contain only letters, digits, and underscore");
 
             RuleFor(x => x.Email)
                 .NotEmpty().WithMessage("Email is required")
                 .EmailAddress().WithMessage("Invalid email format")
-                .MustAsync(BeUniqueEmail).WithMessage("Email already exists");
+                .MaximumLength(200).WithMessage("Email cannot exceed 200 characters");
 
             RuleFor(x => x.Password)
                 .NotEmpty().WithMessage("Password is required")
-                .MinimumLength(6).WithMessage("Password must be at least 6 characters");
+                .MinimumLength(8).WithMessage(PasswordRuleMessage)
+                .Matches(@"[A-Z]").WithMessage(PasswordRuleMessage)
+                .Matches(@"[a-z]").WithMessage(PasswordRuleMessage)
+                .Matches(@"\d").WithMessage(PasswordRuleMessage)
+                .Matches(@"[^a-zA-Z0-9]").WithMessage(PasswordRuleMessage);
 
             RuleFor(x => x.DisplayName)
-                .NotEmpty().WithMessage("Display name is required")
-                .MaximumLength(100).WithMessage("Display name cannot exceed 100 characters");
-        }
-
-        private async Task<bool> BeUniqueUsername(string username, CancellationToken cancellationToken)
-        {
-            return !await _dbContext.Users
-                .AsNoTracking()
-                .AnyAsync(u => u.Username == username, cancellationToken);
-        }
-
-        private async Task<bool> BeUniqueEmail(string email, CancellationToken cancellationToken)
-        {
-            return !await _dbContext.Users
-                .AsNoTracking()
-                .AnyAsync(u => u.Email == email, cancellationToken);
+                .MaximumLength(150).WithMessage("Display name cannot exceed 150 characters");
         }
     }
 }

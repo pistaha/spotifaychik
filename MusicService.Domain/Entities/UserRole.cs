@@ -11,5 +11,6 @@ namespace MusicService.Domain.Entities
         public Role? Role { get; set; }
 
         public DateTime AssignedAt { get; set; }
+        public Guid? AssignedBy { get; set; }
     }
 }

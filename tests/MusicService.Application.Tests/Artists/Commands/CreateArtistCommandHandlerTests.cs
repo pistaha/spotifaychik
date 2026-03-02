@@ -1,31 +1,41 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
 using MusicService.Application.Artists.Commands;
 using MusicService.Application.Artists.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Domain.Entities;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Artists.Commands;
 
 public class CreateArtistCommandHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IArtistRepository> _artistRepository = new();
-    private readonly Mock<Microsoft.Extensions.Logging.ILogger<CreateArtistCommandHandler>> _logger = new();
-
     [Fact]
     public async Task Handle_ShouldCreateArtistAndReturnDto()
     {
-        _artistRepository.Setup(r => r.CreateAsync(It.IsAny<Artist>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Artist a, CancellationToken _) => { a.Id = Guid.NewGuid(); return a; });
-        var handler = new CreateArtistCommandHandler(_artistRepository.Object, _mapper, _logger.Object);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var creatorId = Guid.NewGuid();
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+        var handler = new CreateArtistCommandHandler(
+            dbContext,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<CreateArtistCommandHandler>());
 
-        var result = await handler.Handle(new CreateArtistCommand { Name = "Artist" }, CancellationToken.None);
+        var result = await handler.Handle(new CreateArtistCommand { Name = "Artist", CreatedById = creatorId }, CancellationToken.None);
 
         result.Should().BeOfType<ArtistDto>();
-        _artistRepository.Verify(r => r.CreateAsync(It.IsAny<Artist>(), It.IsAny<CancellationToken>()), Times.Once);
+        dbContext.Artists.Should().ContainSingle(a => a.Name == "Artist");
     }
 }

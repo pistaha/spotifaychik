@@ -1,42 +1,70 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
 using MusicService.Application.Albums.Commands;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Albums.Commands;
 
 public class CreateAlbumCommandHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IAlbumRepository> _albumRepository = new();
-    private readonly Mock<IArtistRepository> _artistRepository = new();
-    private readonly Mock<Microsoft.Extensions.Logging.ILogger<CreateAlbumCommandHandler>> _logger = new();
-
     [Fact]
     public async Task Handle_ShouldCreateAlbum_WhenArtistExists()
     {
-        var command = new CreateAlbumCommand { ArtistId = Guid.NewGuid(), Title = "Album", Type = "Album" };
-        _artistRepository.Setup(r => r.GetByIdAsync(command.ArtistId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Artist { Id = command.ArtistId });
-        _albumRepository.Setup(r => r.CreateAsync(It.IsAny<Album>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Album a, CancellationToken _) => { a.Id = Guid.NewGuid(); return a; });
-        var handler = new CreateAlbumCommandHandler(_albumRepository.Object, _artistRepository.Object, _mapper, _logger.Object);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+
+        var command = new CreateAlbumCommand
+        {
+            ArtistId = artistId,
+            CreatedById = creatorId,
+            Title = "Album",
+            Type = "Album",
+            ReleaseDate = DateTime.UtcNow,
+            Genres = new List<string> { "Rock" }
+        };
+        var handler = new CreateAlbumCommandHandler(dbContext, TestMapperFactory.Create(), LoggerFactory.Create(_ => { }).CreateLogger<CreateAlbumCommandHandler>());
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Title.Should().Be("Album");
+        dbContext.Albums.Should().ContainSingle(a => a.Title == "Album" && a.ArtistId == artistId);
     }
 
     [Fact]
     public async Task Handle_ShouldThrow_WhenArtistMissing()
     {
-        var command = new CreateAlbumCommand { ArtistId = Guid.NewGuid(), Title = "Album", Type = "Album" };
-        _artistRepository.Setup(r => r.GetByIdAsync(command.ArtistId, It.IsAny<CancellationToken>())).ReturnsAsync((Artist?)null);
-        var handler = new CreateAlbumCommandHandler(_albumRepository.Object, _artistRepository.Object, _mapper, _logger.Object);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var command = new CreateAlbumCommand
+        {
+            ArtistId = Guid.NewGuid(),
+            CreatedById = Guid.NewGuid(),
+            Title = "Album",
+            Type = "Album",
+            ReleaseDate = DateTime.UtcNow
+        };
+        var handler = new CreateAlbumCommandHandler(dbContext, TestMapperFactory.Create(), LoggerFactory.Create(_ => { }).CreateLogger<CreateAlbumCommandHandler>());
 
         var act = async () => await handler.Handle(command, CancellationToken.None);
 

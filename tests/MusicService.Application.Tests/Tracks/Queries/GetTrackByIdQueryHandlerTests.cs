@@ -1,42 +1,51 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using AutoMapper;
 using FluentAssertions;
-using Moq;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Tracks.Dtos;
 using MusicService.Application.Tracks.Queries;
 using MusicService.Domain.Entities;
+using Tests.EFCoreTests;
 using Xunit;
 
-namespace tests.MusicService.Application.Tests.Tracks.Queries;
+namespace Tests.MusicService.Application.Tests.Tracks.Queries;
 
 public class GetTrackByIdQueryHandlerTests
 {
     [Fact]
     public async Task Handle_ShouldReturnTrackDto_WhenTrackExists()
     {
-        // Arrange
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
         var trackId = Guid.NewGuid();
-        var query = new GetTrackByIdQuery { TrackId = trackId };
-        
-        var track = new Track { Id = trackId, Title = "Test Track", DurationSeconds = 180 };
-        var trackDto = new TrackDto { Id = trackId, Title = "Test Track" };
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
+        dbContext.Albums.Add(new Album
+        {
+            Id = albumId,
+            ArtistId = artistId,
+            Title = "Album",
+            ReleaseDate = DateTime.UtcNow,
+            Type = AlbumType.Album,
+            Genres = new List<string>()
+        });
+        dbContext.Tracks.Add(new Track
+        {
+            Id = trackId,
+            Title = "Test Track",
+            DurationSeconds = 180,
+            TrackNumber = 1,
+            AlbumId = albumId,
+            ArtistId = artistId
+        });
+        await dbContext.SaveChangesAsync();
 
-        var trackRepoMock = new Mock<ITrackRepository>();
-        trackRepoMock.Setup(r => r.GetByIdAsync(trackId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(track);
+        var handler = new GetTrackByIdQueryHandler(dbContext, TestMapperFactory.Create());
 
-        var mapperMock = new Mock<IMapper>();
-        mapperMock.Setup(m => m.Map<TrackDto>(track)).Returns(trackDto);
+        var result = await handler.Handle(new GetTrackByIdQuery { TrackId = trackId }, CancellationToken.None);
 
-        var handler = new GetTrackByIdQueryHandler(trackRepoMock.Object, mapperMock.Object);
-
-        // Act
-        var result = await handler.Handle(query, CancellationToken.None);
-
-        // Assert
         result.Should().NotBeNull();
         result!.Id.Should().Be(trackId);
         result.Title.Should().Be("Test Track");
@@ -45,20 +54,11 @@ public class GetTrackByIdQueryHandlerTests
     [Fact]
     public async Task Handle_ShouldReturnNull_WhenTrackNotFound()
     {
-        // Arrange
-        var trackId = Guid.NewGuid();
-        var query = new GetTrackByIdQuery { TrackId = trackId };
-        
-        var trackRepoMock = new Mock<ITrackRepository>();
-        trackRepoMock.Setup(r => r.GetByIdAsync(trackId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Track?)null);
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var handler = new GetTrackByIdQueryHandler(dbContext, TestMapperFactory.Create());
 
-        var handler = new GetTrackByIdQueryHandler(trackRepoMock.Object, Mock.Of<IMapper>());
+        var result = await handler.Handle(new GetTrackByIdQuery { TrackId = Guid.NewGuid() }, CancellationToken.None);
 
-        // Act
-        var result = await handler.Handle(query, CancellationToken.None);
-
-        // Assert
         result.Should().BeNull();
     }
 }

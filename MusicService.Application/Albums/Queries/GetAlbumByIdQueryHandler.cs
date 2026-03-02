@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Common.Interfaces;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,12 +24,19 @@ namespace MusicService.Application.Albums.Queries
 
         public async Task<AlbumDto?> Handle(GetAlbumByIdQuery request, CancellationToken cancellationToken)
         {
-            var album = await _dbContext.Albums
+            var query = _dbContext.Albums
                 .AsNoTracking()
                 .Include(a => a.Artist)
                 .Include(a => a.Tracks)
                 .AsSplitQuery()
-                .FirstOrDefaultAsync(a => a.Id == request.AlbumId, cancellationToken);
+                .Where(a => a.Id == request.AlbumId);
+
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(a => a.CreatedById == request.UserId.Value);
+            }
+
+            var album = await query.FirstOrDefaultAsync(cancellationToken);
             return album != null ? _mapper.Map<AlbumDto>(album) : null;
         }
     }

@@ -20,6 +20,14 @@ namespace MusicService.Infrastructure.Persistence
         public DbSet<User> Users => Set<User>();
         public DbSet<Role> Roles => Set<Role>();
         public DbSet<UserRole> UserRoles => Set<UserRole>();
+        public DbSet<UserSession> UserSessions => Set<UserSession>();
+        public DbSet<UserClaim> UserClaims => Set<UserClaim>();
+        public DbSet<Permission> Permissions => Set<Permission>();
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+        public DbSet<SecurityAuditLog> SecurityAuditLogs => Set<SecurityAuditLog>();
+        public DbSet<FileMetadata> FileMetadatas => Set<FileMetadata>();
+        public DbSet<FileUploadSession> FileUploadSessions => Set<FileUploadSession>();
+        public DbSet<AlbumImage> AlbumImages => Set<AlbumImage>();
         public DbSet<Artist> Artists => Set<Artist>();
         public DbSet<Album> Albums => Set<Album>();
         public DbSet<Track> Tracks => Set<Track>();
@@ -40,13 +48,20 @@ namespace MusicService.Infrastructure.Persistence
                 builder.HasKey(x => x.Id);
                 builder.Property(x => x.Id).ValueGeneratedNever();
                 builder.Property(x => x.Username).IsRequired().HasMaxLength(50);
-                builder.Property(x => x.Email).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.Email).IsRequired().HasMaxLength(200);
                 builder.Property(x => x.PasswordHash).IsRequired().HasMaxLength(200);
-                builder.Property(x => x.DisplayName).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.PasswordSalt).IsRequired().HasMaxLength(200);
+                builder.Property(x => x.FirstName).HasMaxLength(100);
+                builder.Property(x => x.LastName).HasMaxLength(100);
+                builder.Property(x => x.DisplayName).IsRequired().HasMaxLength(150);
                 builder.Property(x => x.ProfileImage).HasMaxLength(500);
                 builder.Property(x => x.Country).IsRequired().HasMaxLength(80).HasDefaultValue("Unknown");
                 builder.Property(x => x.ListenTimeMinutes).HasDefaultValue(0);
-                builder.Property(x => x.LastLogin).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.LastLoginAt);
+                builder.Property(x => x.PhoneNumber).HasMaxLength(30);
+                builder.Property(x => x.IsEmailConfirmed).HasDefaultValue(false);
+                builder.Property(x => x.IsActive).HasDefaultValue(true);
+                builder.Property(x => x.IsDeleted).HasDefaultValue(false);
                 builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.FavoriteGenres)
@@ -61,6 +76,16 @@ namespace MusicService.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.Cascade);
 
                 builder.HasMany(x => x.ListenHistory)
+                    .WithOne(x => x.User)
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                builder.HasMany(x => x.Sessions)
+                    .WithOne(x => x.User)
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                builder.HasMany(x => x.Claims)
                     .WithOne(x => x.User)
                     .HasForeignKey(x => x.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
@@ -83,6 +108,7 @@ namespace MusicService.Infrastructure.Persistence
                 builder.ToTable("user_roles");
                 builder.HasKey(x => new { x.UserId, x.RoleId });
                 builder.Property(x => x.AssignedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.AssignedBy);
                 builder.HasOne(x => x.User)
                     .WithMany(x => x.UserRoles)
                     .HasForeignKey(x => x.UserId)
@@ -90,6 +116,133 @@ namespace MusicService.Infrastructure.Persistence
                 builder.HasOne(x => x.Role)
                     .WithMany(x => x.UserRoles)
                     .HasForeignKey(x => x.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<UserSession>(builder =>
+            {
+                builder.ToTable("user_sessions");
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedNever();
+                builder.Property(x => x.RefreshTokenHash).IsRequired().HasMaxLength(500);
+                builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.ExpiresAt).IsRequired();
+                builder.Property(x => x.DeviceInfo).HasMaxLength(200);
+                builder.Property(x => x.IpAddress).HasMaxLength(100);
+                builder.Property(x => x.IsRevoked).HasDefaultValue(false);
+                builder.HasIndex(x => x.UserId);
+            });
+
+            modelBuilder.Entity<UserClaim>(builder =>
+            {
+                builder.ToTable("user_claims");
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedNever();
+                builder.Property(x => x.ClaimType).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.ClaimValue).IsRequired().HasMaxLength(500);
+                builder.HasIndex(x => new { x.UserId, x.ClaimType });
+            });
+
+            modelBuilder.Entity<Permission>(builder =>
+            {
+                builder.ToTable("permissions");
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedNever();
+                builder.Property(x => x.Name).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.Description).HasMaxLength(200);
+                builder.Property(x => x.Category).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.HasIndex(x => x.Name).IsUnique();
+            });
+
+            modelBuilder.Entity<RolePermission>(builder =>
+            {
+                builder.ToTable("role_permissions");
+                builder.HasKey(x => new { x.RoleId, x.PermissionId });
+                builder.HasOne(x => x.Role)
+                    .WithMany(x => x.RolePermissions)
+                    .HasForeignKey(x => x.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                builder.HasOne(x => x.Permission)
+                    .WithMany(x => x.RolePermissions)
+                    .HasForeignKey(x => x.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<SecurityAuditLog>(builder =>
+            {
+                builder.ToTable("security_audit_logs");
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedNever();
+                builder.Property(x => x.EventType).IsRequired();
+                builder.Property(x => x.Email).HasMaxLength(200);
+                builder.Property(x => x.IpAddress).HasMaxLength(100);
+                builder.Property(x => x.UserAgent).HasMaxLength(300);
+                builder.Property(x => x.Details).HasMaxLength(2000);
+                builder.Property(x => x.Timestamp).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.HasIndex(x => x.UserId);
+                builder.HasIndex(x => x.EventType);
+            });
+
+            modelBuilder.Entity<FileMetadata>(builder =>
+            {
+                builder.ToTable("file_metadata");
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedNever();
+                builder.Property(x => x.FileName).IsRequired().HasMaxLength(255);
+                builder.Property(x => x.OriginalFileName).IsRequired().HasMaxLength(255);
+                builder.Property(x => x.ContentType).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.Size).IsRequired();
+                builder.Property(x => x.UploadedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.Path).IsRequired().HasMaxLength(500);
+                builder.Property(x => x.Hash).IsRequired().HasMaxLength(128);
+                builder.Property(x => x.IsPublic).HasDefaultValue(false);
+                builder.Property(x => x.DownloadCount).HasDefaultValue(0);
+                builder.Property(x => x.ThumbnailSmallPath).HasMaxLength(500);
+                builder.Property(x => x.ThumbnailMediumPath).HasMaxLength(500);
+                builder.HasIndex(x => x.UploadedBy);
+                builder.HasIndex(x => x.Hash);
+                builder.HasOne(x => x.UploadedByUser)
+                    .WithMany(x => x.UploadedFiles)
+                    .HasForeignKey(x => x.UploadedBy)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<FileUploadSession>(builder =>
+            {
+                builder.ToTable("file_upload_sessions");
+                builder.HasKey(x => x.Id);
+                builder.Property(x => x.Id).ValueGeneratedNever();
+                builder.Property(x => x.UploadId).IsRequired().HasMaxLength(100);
+                builder.Property(x => x.FileName).IsRequired().HasMaxLength(255);
+                builder.Property(x => x.TotalChunks).IsRequired();
+                builder.Property(x => x.UploadedChunks).HasDefaultValue(0);
+                builder.Property(x => x.TotalSize).HasDefaultValue(0);
+                builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.Property(x => x.IsCompleted).HasDefaultValue(false);
+                builder.HasIndex(x => x.UploadId).IsUnique();
+                builder.HasOne(x => x.UploadedByUser)
+                    .WithMany(x => x.FileUploadSessions)
+                    .HasForeignKey(x => x.UploadedBy)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AlbumImage>(builder =>
+            {
+                builder.ToTable("album_images");
+                builder.HasKey(x => new { x.AlbumId, x.FileId });
+                builder.Property(x => x.IsMain).HasDefaultValue(false);
+                builder.Property(x => x.Order).HasDefaultValue(0);
+                builder.Property(x => x.AttachedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                builder.HasOne(x => x.Album)
+                    .WithMany(x => x.Images)
+                    .HasForeignKey(x => x.AlbumId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                builder.HasOne(x => x.File)
+                    .WithMany()
+                    .HasForeignKey(x => x.FileId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
@@ -106,6 +259,7 @@ namespace MusicService.Infrastructure.Persistence
                 builder.Property(x => x.Country).IsRequired().HasMaxLength(80).HasDefaultValue("Unknown");
                 builder.Property(x => x.IsVerified).HasDefaultValue(false);
                 builder.Property(x => x.MonthlyListeners).HasDefaultValue(0);
+                builder.Property(x => x.CreatedById);
                 builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.Genres)
@@ -123,6 +277,11 @@ namespace MusicService.Infrastructure.Persistence
                     .WithOne(x => x.Artist)
                     .HasForeignKey(x => x.ArtistId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                builder.HasOne(x => x.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(x => x.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<Album>(builder =>
@@ -136,6 +295,7 @@ namespace MusicService.Infrastructure.Persistence
                 builder.Property(x => x.ReleaseDate).IsRequired();
                 builder.Property(x => x.Type).IsRequired();
                 builder.Property(x => x.TotalDurationMinutes).HasDefaultValue(0);
+                builder.Property(x => x.CreatedById);
                 builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.Genres)
@@ -149,6 +309,11 @@ namespace MusicService.Infrastructure.Persistence
                     .WithOne(x => x.Album)
                     .HasForeignKey(x => x.AlbumId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                builder.HasOne(x => x.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(x => x.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<Track>(builder =>
@@ -165,6 +330,7 @@ namespace MusicService.Infrastructure.Persistence
                 builder.Property(x => x.LikeCount).HasDefaultValue(0);
                 builder.Property(x => x.IsExplicit).HasDefaultValue(false);
                 builder.Property(x => x.PopularityScore).HasPrecision(5, 2).HasDefaultValue(0);
+                builder.Property(x => x.CreatedById);
                 builder.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.Property(x => x.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 builder.HasIndex(x => new { x.AlbumId, x.TrackNumber }).IsUnique();
@@ -180,6 +346,11 @@ namespace MusicService.Infrastructure.Persistence
                     .WithOne(x => x.Track)
                     .HasForeignKey(x => x.TrackId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                builder.HasOne(x => x.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(x => x.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<Playlist>(builder =>
@@ -304,7 +475,6 @@ namespace MusicService.Infrastructure.Persistence
                         join.HasKey("user_id", "friend_id");
                     });
 
-            SeedData(modelBuilder);
         }
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -327,59 +497,25 @@ namespace MusicService.Infrastructure.Persistence
                 }
             }
 
+            foreach (var entry in ChangeTracker.Entries<FileUploadSession>())
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    if (entry.Entity.Id == Guid.Empty)
+                    {
+                        entry.Entity.Id = Guid.NewGuid();
+                    }
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.UpdatedAt = now;
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    entry.Entity.UpdatedAt = now;
+                }
+            }
+
             return base.SaveChangesAsync(cancellationToken);
         }
 
-        private static void SeedData(ModelBuilder modelBuilder)
-        {
-            var adminRoleId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-            var userRoleId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-
-            var adminUserId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-            var demoUserId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-
-            var seedTime = new DateTime(2026, 1, 12, 0, 0, 0, DateTimeKind.Utc);
-
-            modelBuilder.Entity<Role>().HasData(
-                new Role { Id = adminRoleId, Name = "Admin", Description = "System administrator", CreatedAt = seedTime, UpdatedAt = seedTime },
-                new Role { Id = userRoleId, Name = "User", Description = "Default user", CreatedAt = seedTime, UpdatedAt = seedTime }
-            );
-
-            modelBuilder.Entity<User>().HasData(
-                new User
-                {
-                    Id = adminUserId,
-                    Username = "admin",
-                    Email = "admin@music.local",
-                    PasswordHash = "demo",
-                    DisplayName = "Administrator",
-                    Country = "Unknown",
-                    ListenTimeMinutes = 0,
-                    LastLogin = seedTime,
-                    CreatedAt = seedTime,
-                    UpdatedAt = seedTime,
-                    FavoriteGenres = new List<string>()
-                },
-                new User
-                {
-                    Id = demoUserId,
-                    Username = "demo",
-                    Email = "demo@music.local",
-                    PasswordHash = "demo",
-                    DisplayName = "Demo User",
-                    Country = "Unknown",
-                    ListenTimeMinutes = 0,
-                    LastLogin = seedTime,
-                    CreatedAt = seedTime,
-                    UpdatedAt = seedTime,
-                    FavoriteGenres = new List<string>()
-                }
-            );
-
-            modelBuilder.Entity<UserRole>().HasData(
-                new UserRole { UserId = adminUserId, RoleId = adminRoleId, AssignedAt = seedTime },
-                new UserRole { UserId = demoUserId, RoleId = userRoleId, AssignedAt = seedTime }
-            );
-        }
     }
 }

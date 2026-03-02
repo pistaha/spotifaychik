@@ -22,9 +22,16 @@ namespace MusicService.Application.Artists.Queries
         public async Task<ArtistDto?> Handle(GetArtistByIdQuery request, CancellationToken cancellationToken)
         {
             var nowYear = DateTime.UtcNow.Year;
-            return await _dbContext.Artists
+            var query = _dbContext.Artists
                 .AsNoTracking()
-                .Where(a => a.Id == request.ArtistId)
+                .Where(a => a.Id == request.ArtistId);
+
+            if (request.UserId.HasValue)
+            {
+                query = query.Where(a => a.CreatedById == request.UserId.Value);
+            }
+
+            return await query
                 .Select(a => new ArtistDto
                 {
                     Id = a.Id,

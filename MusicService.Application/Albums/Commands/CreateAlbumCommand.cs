@@ -14,5 +14,6 @@ namespace MusicService.Application.Albums.Commands
         public string Type { get; init; } = string.Empty;
         public List<string> Genres { get; init; } = new();
         public Guid ArtistId { get; init; }
+        public Guid CreatedById { get; init; }
     }
 }

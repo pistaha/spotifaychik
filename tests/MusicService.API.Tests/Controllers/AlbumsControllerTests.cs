@@ -1,5 +1,6 @@
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using MusicService.API.Controllers;
@@ -8,6 +9,9 @@ using MusicService.Application.Albums.Dtos;
 using MusicService.Application.Albums.Queries;
 using MusicService.Application.Common;
 using MusicService.Application.Common.Dtos;
+using MusicService.Application.Common.Interfaces;
+using System.Linq;
+using System.Security.Claims;
 using Xunit;
 
 namespace Tests.MusicService.API.Tests.Controllers;
@@ -15,11 +19,34 @@ namespace Tests.MusicService.API.Tests.Controllers;
 public class AlbumsControllerTests
 {
     private readonly Mock<IMediator> _mediator = new();
+    private readonly Mock<IMusicServiceDbContext> _dbContext = new();
     private readonly AlbumsController _controller;
 
     public AlbumsControllerTests()
     {
-        _controller = new AlbumsController(_mediator.Object);
+        _controller = new AlbumsController(_mediator.Object, _dbContext.Object);
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = BuildUser("Admin")
+            }
+        };
+    }
+
+    private static ClaimsPrincipal BuildUser(string role)
+    {
+        return BuildUser(role, Guid.NewGuid());
+    }
+
+    private static ClaimsPrincipal BuildUser(string role, Guid userId)
+    {
+        var identity = new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Role, role)
+        }, "Test");
+        return new ClaimsPrincipal(identity);
     }
 
     [Fact]
@@ -54,12 +81,21 @@ public class AlbumsControllerTests
     [Fact]
     public async Task BulkCreateAlbums_ShouldPassCommandsToMediator()
     {
+        var userId = Guid.NewGuid();
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = BuildUser("Admin", userId)
+            }
+        };
         var commands = new List<CreateAlbumCommand> { new(), new() };
         var bulkResult = new BulkOperationResult<AlbumDto>
         {
             Items = new List<BulkOperationItem<AlbumDto>> { new() { Data = new AlbumDto { Id = Guid.NewGuid() }, Success = true } }
         };
-        _mediator.Setup(m => m.Send(It.Is<BulkCreateAlbumsCommand>(c => c.Commands == commands), It.IsAny<CancellationToken>()))
+        _mediator.Setup(m => m.Send(It.Is<BulkCreateAlbumsCommand>(c =>
+            c.Commands.Count == commands.Count && c.Commands.All(cmd => cmd.CreatedById == userId)), It.IsAny<CancellationToken>()))
             .ReturnsAsync(bulkResult);
 
         var response = await _controller.BulkCreateAlbums(commands, CancellationToken.None);

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace MusicService.Domain.Entities
 {
@@ -9,13 +8,20 @@ namespace MusicService.Domain.Entities
         public string Username { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
+        public string PasswordSalt { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public string? ProfileImage { get; set; }
         public DateTime? DateOfBirth { get; set; }
+        public string? PhoneNumber { get; set; }
         public string Country { get; set; } = "Unknown";
         public List<string> FavoriteGenres { get; set; } = new();
         public int ListenTimeMinutes { get; set; }
-        public DateTime LastLogin { get; set; }
+        public DateTime? LastLoginAt { get; set; }
+        public bool IsEmailConfirmed { get; set; }
+        public bool IsActive { get; set; } = true;
+        public bool IsDeleted { get; set; }
         
         // Навигационные свойства
         public List<Playlist> CreatedPlaylists { get; set; } = new();
@@ -26,6 +32,10 @@ namespace MusicService.Domain.Entities
         public List<User> Friends { get; set; } = new();
         public List<ListenHistory> ListenHistory { get; set; } = new();
         public List<UserRole> UserRoles { get; set; } = new();
+        public List<UserSession> Sessions { get; set; } = new();
+        public List<UserClaim> Claims { get; set; } = new();
+        public List<FileMetadata> UploadedFiles { get; set; } = new();
+        public List<FileUploadSession> FileUploadSessions { get; set; } = new();
 
         public void AddListenTime(int minutes)
         {
@@ -40,5 +50,6 @@ namespace MusicService.Domain.Entities
             if (DateTime.UtcNow < DateOfBirth.Value.AddYears(age)) age--;
             return age >= 18;
         }
+
     }
 }

@@ -1,24 +1,22 @@
 using FluentAssertions;
-using Moq;
 using MusicService.Application.Albums.Commands;
-using MusicService.Application.Common.Dtos;
-using MusicService.Application.Common.Interfaces.Repositories;
 using MusicService.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Albums.Commands;
 
 public class BulkDeleteAlbumsCommandHandlerTests
 {
-    private readonly Mock<IAlbumRepository> _albumRepository = new();
-    private readonly Mock<Microsoft.Extensions.Logging.ILogger<BulkDeleteAlbumsCommandHandler>> _logger = new();
-
     [Fact]
     public async Task Handle_ShouldMarkMissingAlbumAsFailed()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var id = Guid.NewGuid();
-        _albumRepository.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync((Album?)null);
-        var handler = new BulkDeleteAlbumsCommandHandler(_albumRepository.Object, _logger.Object);
+        var handler = new BulkDeleteAlbumsCommandHandler(
+            dbContext,
+            LoggerFactory.Create(_ => { }).CreateLogger<BulkDeleteAlbumsCommandHandler>());
 
         var result = await handler.Handle(new BulkDeleteAlbumsCommand { AlbumIds = new List<Guid> { id } }, CancellationToken.None);
 
@@ -29,10 +27,29 @@ public class BulkDeleteAlbumsCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldDeleteAlbumAndReturnSuccess()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
+        var artistId = Guid.NewGuid();
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
         var id = Guid.NewGuid();
-        _albumRepository.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(new Album { Id = id });
-        _albumRepository.Setup(r => r.DeleteAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        var handler = new BulkDeleteAlbumsCommandHandler(_albumRepository.Object, _logger.Object);
+        dbContext.Albums.Add(new Album
+        {
+            Id = id,
+            Title = "Album",
+            ReleaseDate = DateTime.UtcNow,
+            Type = AlbumType.Album,
+            ArtistId = artistId,
+            Genres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+        var handler = new BulkDeleteAlbumsCommandHandler(
+            dbContext,
+            LoggerFactory.Create(_ => { }).CreateLogger<BulkDeleteAlbumsCommandHandler>());
 
         var result = await handler.Handle(new BulkDeleteAlbumsCommand { AlbumIds = new List<Guid> { id } }, CancellationToken.None);
 

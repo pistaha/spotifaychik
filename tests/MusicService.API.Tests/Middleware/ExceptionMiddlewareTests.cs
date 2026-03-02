@@ -1,10 +1,13 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using MusicService.API.Configuration;
+using Moq;
 using Xunit;
 
 namespace Tests.MusicService.API.Tests.Middleware;
@@ -16,7 +19,15 @@ public class ExceptionMiddlewareTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddApiServices(new ConfigurationBuilder().Build());
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Auth:EnableDevelopmentAuth"] = "true"
+            })
+            .Build();
+        var env = new Mock<IWebHostEnvironment>();
+        env.SetupGet(e => e.EnvironmentName).Returns(Environments.Development);
+        services.AddApiServices(configuration, env.Object);
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<ApiBehaviorOptions>>().Value;
         var actionContext = new ActionContext

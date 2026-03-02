@@ -204,8 +204,9 @@ namespace MusicService.Application.Search.Queries
         {
             var users = await _dbContext.Users
                 .AsNoTracking()
-                .Where(u => EF.Functions.ILike(u.Username, $"%{searchTerm}%") ||
-                            (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{searchTerm}%")))
+                .Where(u => !u.IsDeleted &&
+                            (EF.Functions.ILike(u.Username, $"%{searchTerm}%") ||
+                             (u.DisplayName != null && EF.Functions.ILike(u.DisplayName, $"%{searchTerm}%"))))
                 .Select(u => new
                 {
                     u.Id,

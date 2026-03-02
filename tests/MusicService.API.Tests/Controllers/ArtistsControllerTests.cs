@@ -1,5 +1,6 @@
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using MusicService.API.Controllers;
@@ -7,6 +8,7 @@ using MusicService.Application.Artists.Commands;
 using MusicService.Application.Artists.Dtos;
 using MusicService.Application.Artists.Queries;
 using MusicService.Application.Common;
+using System.Security.Claims;
 using Xunit;
 
 namespace Tests.MusicService.API.Tests.Controllers;
@@ -19,6 +21,23 @@ public class ArtistsControllerTests
     public ArtistsControllerTests()
     {
         _controller = new ArtistsController(_mediator.Object);
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = BuildUser("Admin")
+            }
+        };
+    }
+
+    private static ClaimsPrincipal BuildUser(string role)
+    {
+        var identity = new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.Role, role)
+        }, "Test");
+        return new ClaimsPrincipal(identity);
     }
 
     [Fact]

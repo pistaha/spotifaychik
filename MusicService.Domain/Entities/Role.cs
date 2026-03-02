@@ -8,5 +8,6 @@ namespace MusicService.Domain.Entities
         public string? Description { get; set; }
 
         public List<UserRole> UserRoles { get; set; } = new();
+        public List<RolePermission> RolePermissions { get; set; } = new();
     }
 }

@@ -15,5 +15,6 @@ namespace MusicService.Application.Artists.Commands
         public List<string> Genres { get; init; } = new();
         public string Country { get; init; } = "Unknown";
         public DateTime? CareerStartDate { get; init; }
+        public Guid CreatedById { get; init; }
     }
 }

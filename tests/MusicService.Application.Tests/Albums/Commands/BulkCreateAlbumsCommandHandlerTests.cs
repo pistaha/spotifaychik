@@ -1,33 +1,59 @@
-using AutoMapper;
 using FluentAssertions;
-using Moq;
 using MusicService.Application.Albums.Commands;
-using MusicService.Application.Common.Interfaces.Repositories;
-using MusicService.Application.Common.Mapping;
 using MusicService.Domain.Entities;
+using Microsoft.Extensions.Logging;
 using Xunit;
+using Tests.EFCoreTests;
 
 namespace Tests.MusicService.Application.Tests.Albums.Commands;
 
 public class BulkCreateAlbumsCommandHandlerTests
 {
-    private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly Mock<IAlbumRepository> _albumRepository = new();
-    private readonly Mock<IArtistRepository> _artistRepository = new();
-    private readonly Mock<Microsoft.Extensions.Logging.ILogger<BulkCreateAlbumsCommandHandler>> _logger = new();
-
     [Fact]
     public async Task Handle_ShouldQueueValidAlbumsAndCreate()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Artists.Add(new Artist
+        {
+            Id = artistId,
+            Name = "Artist",
+            Country = "US",
+            Genres = new List<string>()
+        });
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
+
         var command = new BulkCreateAlbumsCommand
         {
-            Commands = new List<CreateAlbumCommand> { new() { ArtistId = artistId, Title = "A", Type = "Album" } }
+            Commands = new List<CreateAlbumCommand>
+            {
+                new()
+                {
+                    ArtistId = artistId,
+                    CreatedById = creatorId,
+                    Title = "A",
+                    Type = "Album",
+                    ReleaseDate = DateTime.UtcNow,
+                    Genres = new List<string> { "Rock" }
+                }
+            }
         };
-        _artistRepository.Setup(r => r.GetByIdAsync(artistId, It.IsAny<CancellationToken>())).ReturnsAsync(new Artist { Id = artistId });
-        _albumRepository.Setup(r => r.CreateAsync(It.IsAny<Album>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Album a, CancellationToken _) => { a.Id = Guid.NewGuid(); return a; });
-        var handler = new BulkCreateAlbumsCommandHandler(_albumRepository.Object, _artistRepository.Object, _mapper, _logger.Object);
+        var handler = new BulkCreateAlbumsCommandHandler(
+            dbContext,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<BulkCreateAlbumsCommandHandler>());
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -38,13 +64,39 @@ public class BulkCreateAlbumsCommandHandlerTests
     [Fact]
     public async Task Handle_ShouldSkipWhenArtistMissing()
     {
+        using var dbContext = TestDbContextFactory.Create(Guid.NewGuid().ToString());
         var artistId = Guid.NewGuid();
+        var creatorId = Guid.NewGuid();
+        dbContext.Users.Add(new User
+        {
+            Id = creatorId,
+            Username = "creator",
+            Email = "creator@test.com",
+            PasswordHash = "hash",
+            PasswordSalt = "salt",
+            DisplayName = "Creator",
+            Country = "US",
+            FavoriteGenres = new List<string>()
+        });
+        await dbContext.SaveChangesAsync();
         var command = new BulkCreateAlbumsCommand
         {
-            Commands = new List<CreateAlbumCommand> { new() { ArtistId = artistId, Title = "A", Type = "Album" } }
+            Commands = new List<CreateAlbumCommand>
+            {
+                new()
+                {
+                    ArtistId = artistId,
+                    CreatedById = creatorId,
+                    Title = "A",
+                    Type = "Album",
+                    ReleaseDate = DateTime.UtcNow
+                }
+            }
         };
-        _artistRepository.Setup(r => r.GetByIdAsync(artistId, It.IsAny<CancellationToken>())).ReturnsAsync((Artist?)null);
-        var handler = new BulkCreateAlbumsCommandHandler(_albumRepository.Object, _artistRepository.Object, _mapper, _logger.Object);
+        var handler = new BulkCreateAlbumsCommandHandler(
+            dbContext,
+            TestMapperFactory.Create(),
+            LoggerFactory.Create(_ => { }).CreateLogger<BulkCreateAlbumsCommandHandler>());
 
         var result = await handler.Handle(command, CancellationToken.None);
 

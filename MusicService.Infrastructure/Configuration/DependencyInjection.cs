@@ -18,6 +18,10 @@ namespace MusicService.Infrastructure.Configuration
         {
             // Сервисы безопасности
             services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
+            services.Configure<SecurityAuditOptions>(configuration.GetSection("SecurityAudit"));
+            services.AddSingleton<SecurityAuditQueue>();
+            services.AddSingleton<ISecurityAuditService, SecurityAuditService>();
+            services.AddHostedService<SecurityAuditBackgroundService>();
 
             var connectionString = configuration["Database:ConnectionString"];
             if (string.IsNullOrWhiteSpace(connectionString))
