@@ -1,12 +1,15 @@
 using System;
 using MusicService.API.Configuration;
+using MusicService.API.Infrastructure;
 using MusicService.Application;
 using MusicService.Infrastructure;
 using MusicService.Infrastructure.Configuration;
 using FluentMigrator.Runner;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
+var instanceId = InstanceIdResolver.Resolve(builder.Configuration);
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -36,6 +39,28 @@ var app = builder.Build();
 
 // Конфигурация middleware
 app.UseApiConfiguration(app.Environment);
+app.UseHttpMetrics();
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Instance-Id"] = instanceId;
+    await next();
+});
+
+app.MapGet("/", (HttpContext context) =>
+{
+    context.Response.Headers["X-Instance-Id"] = instanceId;
+
+    return Results.Ok(new
+    {
+        message = "Music Service API is running",
+        instanceId,
+        machineName = Environment.MachineName,
+        timestampUtc = DateTime.UtcNow
+    });
+});
+
+app.MapMetrics("/metrics");
 
 using (var scope = app.Services.CreateScope())
 {

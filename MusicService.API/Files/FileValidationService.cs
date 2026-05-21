@@ -187,16 +187,7 @@ namespace MusicService.API.Files
                 return false;
             }
 
-            foreach (var signature in signatures)
-            {
-                var slice = header.AsSpan(signature.Offset, signature.Bytes.Length);
-                if (slice.SequenceEqual(signature.Bytes))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return HasMatchingSignature(header, signatures);
         }
 
         private static async Task<bool> ValidateSignatureAsync(string filePath, string extension, CancellationToken cancellationToken)
@@ -216,6 +207,11 @@ namespace MusicService.API.Files
                 return false;
             }
 
+            return HasMatchingSignature(header, signatures);
+        }
+
+        private static bool HasMatchingSignature(byte[] header, IEnumerable<FileSignature> signatures)
+        {
             foreach (var signature in signatures)
             {
                 var slice = header.AsSpan(signature.Offset, signature.Bytes.Length);

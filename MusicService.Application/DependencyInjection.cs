@@ -3,6 +3,7 @@ using AutoMapper;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using MusicService.Application.Common.Behaviors;
 
 namespace MusicService.Application
@@ -20,7 +21,7 @@ namespace MusicService.Application
             var mapperConfiguration = new MapperConfiguration(cfg =>
             {
                 cfg.AddMaps(Assembly.GetExecutingAssembly());
-            });
+            }, NullLoggerFactory.Instance);
 
             services.AddSingleton(mapperConfiguration.CreateMapper());
             services.AddSingleton(mapperConfiguration);

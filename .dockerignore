@@ -1,0 +1,11 @@
+.git
+.gitignore
+.idea
+**/bin
+**/obj
+**/TestResults
+**/.DS_Store
+.docker
+MusicService
+MusicServiceLab2
+README.md

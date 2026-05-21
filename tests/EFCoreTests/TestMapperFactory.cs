@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Extensions.Logging.Abstractions;
 using MusicService.Application.Common.Mapping;
 using MusicService.Application.Search.Mapping;
 
@@ -12,7 +13,7 @@ namespace Tests.EFCoreTests
             {
                 cfg.AddProfile<MappingProfile>();
                 cfg.AddProfile<SearchMappingProfile>();
-            });
+            }, NullLoggerFactory.Instance);
             return config.CreateMapper();
         }
     }

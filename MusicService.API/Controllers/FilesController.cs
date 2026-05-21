@@ -50,6 +50,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>загрузка одного файла</summary>
         /// <param name="file">файл для загрузки</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpPost("upload")]
         [Authorize]
         [Consumes("multipart/form-data")]
@@ -82,6 +83,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>загрузка нескольких файлов</summary>
         /// <param name="files">список файлов</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpPost("upload-multiple")]
         [Authorize]
         [Consumes("multipart/form-data")]
@@ -159,6 +161,7 @@ namespace MusicService.API.Controllers
         /// <param name="contentType">images или documents или mime</param>
         /// <param name="search">поиск по имени</param>
         /// <param name="sortOrder">asc или desc</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpGet]
         [Authorize]
         [ProducesResponseType(typeof(ApiResponse<PagedResult<FileMetadataDto>>), 200)]
@@ -222,6 +225,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>скачивание файла</summary>
         /// <param name="id">идентификатор файла</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpGet("{id:guid}")]
         [AllowAnonymous]
         public async Task<IActionResult> DownloadFile(Guid id, CancellationToken cancellationToken = default)
@@ -264,6 +268,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>метаданные файла</summary>
         /// <param name="id">идентификатор файла</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpGet("{id:guid}/info")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(ApiResponse<FileMetadataDto>), 200)]
@@ -286,6 +291,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>потоковая отдача файла</summary>
         /// <param name="id">идентификатор файла</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpGet("{id:guid}/stream")]
         [AllowAnonymous]
         [Produces("application/octet-stream")]
@@ -317,6 +323,7 @@ namespace MusicService.API.Controllers
         /// <summary>превью изображения</summary>
         /// <param name="id">идентификатор файла</param>
         /// <param name="size">small или medium</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpGet("{id:guid}/thumbnail")]
         [AllowAnonymous]
         public async Task<IActionResult> Thumbnail(Guid id, [FromQuery] string size = "small", CancellationToken cancellationToken = default)
@@ -377,6 +384,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>удаление файла</summary>
         /// <param name="id">идентификатор файла</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpDelete("{id:guid}")]
         [Authorize]
         public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken cancellationToken = default)
@@ -402,6 +410,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>загрузка большого файла одним чанком</summary>
         /// <param name="file">файл для загрузки</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpPost("upload/chunked")]
         [Authorize]
         [Consumes("multipart/form-data")]
@@ -601,6 +610,7 @@ namespace MusicService.API.Controllers
 
         /// <summary>прогресс загрузки</summary>
         /// <param name="uploadId">идентификатор загрузки</param>
+        /// <param name="cancellationToken">токен отмены запроса</param>
         [HttpGet("upload/{uploadId}/progress")]
         [Authorize]
         public async Task<ActionResult<ApiResponse<FileUploadProgressDto>>> UploadProgress(

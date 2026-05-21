@@ -6,6 +6,7 @@ using AutoMapper;
 using FluentAssertions;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using MusicService.Application.Common.Behaviors;
 using MusicService.Application.Common.Mapping;
 using MusicService.Application.Search.Mapping;
@@ -149,7 +150,7 @@ namespace Tests.EFCoreTests
             {
                 cfg.AddProfile<MappingProfile>();
                 cfg.AddProfile<SearchMappingProfile>();
-            });
+            }, NullLoggerFactory.Instance);
             return config.CreateMapper();
         }
 

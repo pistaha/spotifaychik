@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using AutoMapper;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using MusicService.Application.Common.Mapping;
 using MusicService.Application.Users.Commands;
 using MusicService.Application.Albums.Queries;
@@ -17,7 +18,7 @@ namespace Tests.EFCoreTests
     {
         private static IMapper CreateMapper()
         {
-            var config = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>());
+            var config = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>(), NullLoggerFactory.Instance);
             return config.CreateMapper();
         }
 

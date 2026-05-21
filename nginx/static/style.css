@@ -1,0 +1,9 @@
+body {
+    font-family: "Segoe UI", sans-serif;
+    background: linear-gradient(135deg, #0b1f33, #164b74);
+    color: #f4f7fb;
+}
+
+h1 {
+    letter-spacing: 0.08em;
+}

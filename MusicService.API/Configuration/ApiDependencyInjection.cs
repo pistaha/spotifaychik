@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MusicService.API.Authentication;
 using MusicService.API.Authorization;
+using MusicService.API.Diagnostics;
 using MusicService.API.Files;
 using MusicService.Infrastructure.Persistence;
 using System;
@@ -177,6 +178,7 @@ namespace MusicService.API.Configuration
                 .AddDbContextCheck<MusicServiceDbContext>("database");
 
             services.Configure<FileStorageOptions>(configuration.GetSection("FileStorage"));
+            services.Configure<MemoryStressOptions>(configuration.GetSection(MemoryStressOptions.SectionName));
             services.AddSingleton<FileValidationService>();
             services.AddSingleton<ImageProcessingService>();
 
@@ -292,7 +294,11 @@ namespace MusicService.API.Configuration
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
+            if (!env.IsDevelopment())
+            {
+                app.UseHttpsRedirection();
+            }
+
             app.UseResponseCompression();
             app.UseRouting();
             
