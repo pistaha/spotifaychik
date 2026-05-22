@@ -18,7 +18,7 @@ x-app-environment: &app-environment
   Diagnostics__MemoryStress__MaxChunks: ${MEMORY_STRESS_MAX_CHUNKS}
 
 x-app-common: &app-common
-  image: ${DOCKER_IMAGE_REPOSITORY}:${APP_IMAGE_TAG:-latest}
+  image: ${DOCKER_IMAGE_REPOSITORY:-your-dockerhub-login/spotifaychik}:${APP_IMAGE_TAG:-latest}
   build:
     context: .
     dockerfile: MusicService.API/Dockerfile

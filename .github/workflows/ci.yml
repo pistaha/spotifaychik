@@ -70,18 +70,37 @@ jobs:
       - name: Deploy latest image
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
+          set -e
+
           echo "DEPLOY_PATH=$DEPLOY_PATH"
+
+          if [ -z "$DEPLOY_PATH" ]; then
+            echo "DEPLOY_PATH secret is empty"
+            exit 1
+          fi
+
           cd "$DEPLOY_PATH"
           pwd
-          ls
+          ls -la
+
+          if [ ! -f docker-compose.yml ]; then
+            echo "docker-compose.yml not found in DEPLOY_PATH"
+            exit 1
+          fi
           export APP_IMAGE_TAG=latest
+          export DOCKER_IMAGE_REPOSITORY="${DOCKER_USERNAME}/${IMAGE_NAME}"
           docker compose pull
           docker compose up -d --no-build --scale app=3
 
       - name: Verify deployment
         run: |
-          sleep 20
+          set -e
+
+          sleep 30
+
+          docker ps
 
           for i in $(seq 1 10); do
             curl -sk https://localhost/ > /dev/null
