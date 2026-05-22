@@ -57,7 +57,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_requests_received_total[1m]))",
+          "expr": "sum(rate(music_service_http_requests_total[1m]))",
           "legendFormat": "RPS",
           "refId": "A"
         }
@@ -102,7 +102,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[1m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(microsoft_aspnetcore_hosting_http_server_request_duration_bucket[1m])))",
           "legendFormat": "p99",
           "refId": "A"
         }
@@ -147,7 +147,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_requests_received_total{status=~\"5..\"}[1m]))",
+          "expr": "sum(rate(music_service_http_requests_total{status=~\"5..\"}[1m]))",
           "legendFormat": "5xx rate",
           "refId": "A"
         }

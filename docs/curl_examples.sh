@@ -34,4 +34,4 @@ curl -s "http://localhost:9090/api/v1/query" \
 echo
 echo "Prometheus 5xx rate query:"
 curl -s "http://localhost:9090/api/v1/query" \
-  --data-urlencode 'query=sum(rate(http_requests_received_total{status=~"5.."}[1m]))'
+  --data-urlencode 'query=sum(rate(music_service_http_requests_total{status=~"5.."}[1m]))'

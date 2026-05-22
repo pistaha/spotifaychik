@@ -115,7 +115,7 @@ jobs:
           curl -fk https://localhost/health
 
           ERROR_RATE=$(curl -s "http://localhost:9090/api/v1/query" \
-            --data-urlencode 'query=sum(rate(http_requests_received_total{status=~"5.."}[1m]))' \
+            --data-urlencode 'query=sum(rate(music_service_http_requests_total{status=~"5.."}[1m]))' \
             | python3 -c 'import json,sys; data=json.load(sys.stdin); result=data.get("data",{}).get("result") or []; print(result[0]["value"][1] if result else "0")')
 
           echo "5xx error rate: $ERROR_RATE"

@@ -10,6 +10,13 @@ using Prometheus;
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
 var instanceId = InstanceIdResolver.Resolve(builder.Configuration);
+var requestCounter = Metrics.CreateCounter(
+    "music_service_http_requests_total",
+    "Total HTTP requests processed by Music Service.",
+    new CounterConfiguration
+    {
+        LabelNames = ["method", "status"]
+    });
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -45,6 +52,9 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Instance-Id"] = instanceId;
     await next();
+    requestCounter
+        .WithLabels(context.Request.Method, context.Response.StatusCode.ToString())
+        .Inc();
 });
 
 app.MapGet("/", (HttpContext context) =>
