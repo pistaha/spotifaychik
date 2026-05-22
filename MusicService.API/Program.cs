@@ -45,7 +45,6 @@ builder.Services.AddHttpClient("default", client =>
 var app = builder.Build();
 
 // Конфигурация middleware
-app.UseApiConfiguration(app.Environment);
 app.UseHttpMetrics();
 
 app.Use(async (context, next) =>
@@ -56,6 +55,8 @@ app.Use(async (context, next) =>
         .WithLabels(context.Request.Method, context.Response.StatusCode.ToString())
         .Inc();
 });
+
+app.UseApiConfiguration(app.Environment);
 
 app.MapGet("/", (HttpContext context) =>
 {
