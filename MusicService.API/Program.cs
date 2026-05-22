@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using MusicService.API.Configuration;
 using MusicService.API.Infrastructure;
 using MusicService.Application;
@@ -11,11 +12,18 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>();
 var instanceId = InstanceIdResolver.Resolve(builder.Configuration);
 var requestCounter = Metrics.CreateCounter(
-    "music_service_http_requests_total",
+    "http_requests_received_total",
     "Total HTTP requests processed by Music Service.",
     new CounterConfiguration
     {
-        LabelNames = ["method", "status"]
+        LabelNames = ["status"]
+    });
+var requestDuration = Metrics.CreateHistogram(
+    "http_request_duration_seconds",
+    "The duration of HTTP requests processed by Music Service.",
+    new HistogramConfiguration
+    {
+        Buckets = Histogram.ExponentialBuckets(0.01, 2, 15)
     });
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -44,16 +52,22 @@ builder.Services.AddHttpClient("default", client =>
 
 var app = builder.Build();
 
-// Конфигурация middleware
-app.UseHttpMetrics();
-
 app.Use(async (context, next) =>
 {
+    var stopwatch = Stopwatch.StartNew();
     context.Response.Headers["X-Instance-Id"] = instanceId;
-    await next();
-    requestCounter
-        .WithLabels(context.Request.Method, context.Response.StatusCode.ToString())
-        .Inc();
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        stopwatch.Stop();
+        requestCounter
+            .WithLabels(context.Response.StatusCode.ToString())
+            .Inc();
+        requestDuration.Observe(stopwatch.Elapsed.TotalSeconds);
+    }
 });
 
 app.UseApiConfiguration(app.Environment);

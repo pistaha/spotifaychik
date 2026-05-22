@@ -314,7 +314,7 @@ Workflow в [ci.yml](/Users/yarik/Rider/spotifaychik/.github/workflows/ci.yml) �
 
 1. ждёт запуск контейнеров;
 2. проверяет `curl -fk https://localhost/health`;
-3. запрашивает у `Prometheus` текущий `5xx rate` по метрике `music_service_http_requests_total`;
+3. запрашивает у `Prometheus` текущий `5xx rate` по метрике `http_requests_received_total`;
 4. завершает job ошибкой, если `5xx rate > 0.05`.
 
 То есть gate реально блокирует deploy в двух случаях:
