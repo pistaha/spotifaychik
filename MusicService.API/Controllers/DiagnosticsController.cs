@@ -99,9 +99,9 @@ namespace MusicService.API.Controllers
                 _lifetime.StopApplication();
             });
 
-            return Ok(new
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
             {
-                success = true,
+                success = false,
                 message = "Graceful shutdown test started. Application will stop in 1 second.",
                 instanceId = _instanceId
             });
