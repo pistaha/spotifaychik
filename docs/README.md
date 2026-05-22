@@ -90,6 +90,20 @@ chmod +x start.sh docs/curl_examples.sh
 - `https://localhost/metrics`
 - `https://localhost/static/style.css`
 
+## Остановка
+
+```bash
+docker compose --env-file .env down
+```
+
+## Быстрые ссылки
+
+```bash
+open https://localhost/
+open http://localhost:9090
+open http://localhost:3000
+```
+
 ## Масштабирование backend
 
 `docker-compose.yml` содержит один сервис `app` на базе общего шаблона `x-app-common`.
@@ -175,8 +189,10 @@ docker compose ps
 ### Метрики приложения
 
 ```bash
-curl http://localhost:9090/api/v1/targets
-curl -sk https://localhost/metrics | head
+curl -k https://localhost/health
+curl -k https://localhost/metrics
+curl -s http://localhost:9090/api/v1/targets
+curl -s "http://localhost:9090/api/v1/query" --data-urlencode 'query=up'
 ```
 
 Grafana должна открываться с хоста по адресу:
@@ -243,6 +259,55 @@ done
 - `HTTP 5xx Rate`
 - `Nginx Logs`
 
+### Проверка разных backend-инстансов
+
+```bash
+for i in $(seq 1 20); do
+  curl -sk https://localhost/
+  echo
+done
+```
+
+В ответах должен меняться `instanceId`, например `app-1`, `app-2`, `app-3`.
+
+### Проверка Prometheus targets
+
+```bash
+curl -s http://localhost:9090/api/v1/targets
+```
+
+Ожидается `UP` для:
+
+- `job="app"` у нескольких реплик;
+- `job="nginx"` у `nginx-exporter`.
+
+### Проверка Grafana dashboard
+
+Открыть Grafana:
+
+```bash
+open http://localhost:3000
+```
+
+Проверить dashboard `Music Service Observability`. На нём должны быть панели:
+
+- `RPS`
+- `Latency p99`
+- `HTTP 5xx Rate`
+- `Nginx Logs`
+
+### Проверка Loki / Grafana Explore
+
+В `Grafana -> Explore` можно использовать запросы:
+
+```logql
+{compose_service="nginx"}
+```
+
+```logql
+{compose_service="app"}
+```
+
 ### Проверка acceptance gate
 
 Workflow в [ci.yml](/Users/yarik/Rider/spotifaychik/.github/workflows/ci.yml) после деплоя:
@@ -251,6 +316,40 @@ Workflow в [ci.yml](/Users/yarik/Rider/spotifaychik/.github/workflows/ci.yml) �
 2. проверяет `curl -fk https://localhost/health`;
 3. запрашивает у `Prometheus` текущий `5xx rate`;
 4. завершает job ошибкой, если `5xx rate > 0.05`.
+
+То есть gate реально блокирует deploy в двух случаях:
+
+- `/health` возвращает не `200`, потому что используется `curl -fk https://localhost/health`;
+- `5xx rate > 0.05`, потому что число проверяется через `python3` и при превышении workflow завершается с ошибкой.
+
+## CI/CD
+
+Pipeline запускается на push в `main` и состоит из job:
+
+- `build`
+- `docker-build-push`
+- `notify`
+- `deploy`
+
+`docker-build-push` публикует образ:
+
+- `pistahas/spotifaychik:latest`
+- `pistahas/spotifaychik:<short_sha>`
+
+`deploy` выполняется на `self-hosted runner`, использует secrets:
+
+- `DOCKER_USERNAME`
+- `DOCKER_PASSWORD`
+- `DEPLOY_PATH`
+
+Во время деплоя runner:
+
+1. заходит в `DEPLOY_PATH`;
+2. проверяет наличие `docker-compose.yml`;
+3. экспортирует `APP_IMAGE_TAG=latest`;
+4. экспортирует `DOCKER_IMAGE_REPOSITORY="${DOCKER_USERNAME}/spotifaychik"`;
+5. выполняет `docker compose pull`;
+6. выполняет `docker compose up -d --no-build --scale app=3`.
 
 ## GitHub Secrets
 
@@ -267,7 +366,9 @@ Workflow в [ci.yml](/Users/yarik/Rider/spotifaychik/.github/workflows/ci.yml) �
 В каталог `docs/screenshots/` нужно сохранить:
 
 - `successful-pipeline.png` — успешный прогон GitHub Actions со всеми зелёными job.
+- `deploy-verify-green.png` — зелёные `deploy` и `Verify deployment`.
 - `blocked-deploy.png` — проваленный deploy после намеренно сломанного `/health`.
+- `prometheus-targets.png` — targets со статусом `UP`.
 - `grafana-dashboard.png` — Grafana dashboard с живыми графиками.
 - `grafana-logs.png` — Grafana Explore с логами из Loki.
 

@@ -6,6 +6,8 @@
 # dotenv files
 .env
 .docker/
+actions-runner/
+.DS_Store
 
 # User-specific files
 *.rsuser
