@@ -107,6 +107,25 @@ namespace MusicService.API.Controllers
             });
         }
 
+        [HttpPost("http-503")]
+        [AllowAnonymous]
+        public IActionResult ReturnServerError()
+        {
+            if (!_environment.IsDevelopment())
+            {
+                return NotFound();
+            }
+
+            Response.Headers["X-Instance-Id"] = _instanceId;
+
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                success = false,
+                message = "Synthetic 503 response for observability checks.",
+                instanceId = _instanceId
+            });
+        }
+
         private void ExhaustMemoryUntilProcessDies(int chunkSizeBytes, int maxChunks)
         {
             var allocations = new List<nint>();
