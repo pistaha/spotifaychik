@@ -71,7 +71,10 @@ jobs:
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
+          echo "DEPLOY_PATH=$DEPLOY_PATH"
           cd "$DEPLOY_PATH"
+          pwd
+          ls
           export APP_IMAGE_TAG=latest
           docker compose pull
           docker compose up -d --no-build --scale app=3
@@ -79,9 +82,11 @@ jobs:
       - name: Verify deployment
         run: |
           sleep 20
+
           for i in $(seq 1 10); do
             curl -sk https://localhost/ > /dev/null
           done
+
           curl -fk https://localhost/health
 
           ERROR_RATE=$(curl -s "http://localhost:9090/api/v1/query" \
