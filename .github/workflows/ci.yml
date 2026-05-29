@@ -71,10 +71,11 @@ jobs:
     needs: docker-build-push
     runs-on: self-hosted
     steps:
-      - name: Deploy latest image
+      - name: Deploy image by short SHA
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          APP_IMAGE_TAG: ${{ needs.docker-build-push.outputs.short_sha }}
         run: |
           set -e
 
@@ -94,11 +95,10 @@ jobs:
             exit 1
           fi
 
-          export APP_IMAGE_TAG=latest
           export DOCKER_IMAGE_REPOSITORY="${DOCKER_USERNAME}/${IMAGE_NAME}"
 
           docker compose pull
-          docker compose up -d --no-build --scale app=3
+          docker compose up -d --no-build --force-recreate --scale app=3
 
       - name: Verify deployment
         run: |
